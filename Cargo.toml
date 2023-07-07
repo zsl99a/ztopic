@@ -1,0 +1,29 @@
+[package]
+name = "helium"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0"
+futures = "0"
+flume = "0"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0", features = ["codec"] }
+pin-project-lite = "0"
+
+s2n-quic = "1"
+rustls-pemfile = "1"
+
+serde = "1"
+bincode = "1"
+tokio-serde = { version = "0", features = ["bincode"] }
+
+async-stream = "0"
+
+rbson = "2"
+im = "15"
+
+[profile.release]
+lto = true
