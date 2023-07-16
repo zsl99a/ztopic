@@ -3,6 +3,7 @@ use std::{
     thread::yield_now,
 };
 
+#[derive(Debug)]
 pub struct VLock {
     pub is_locked: AtomicBool,
 }

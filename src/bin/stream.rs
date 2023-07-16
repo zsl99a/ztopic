@@ -1,8 +1,8 @@
 use std::time::Instant;
 
-use futures::{StreamExt, SinkExt};
+use futures::{SinkExt, StreamExt};
 use helium::SharedStream;
-use tokio::{time::Duration, task::yield_now};
+use tokio::{task::yield_now, time::Duration};
 
 #[tokio::main]
 async fn main() {
