@@ -18,6 +18,7 @@ impl VLock {
         }
     }
 
+    #[inline]
     pub fn try_lock(&self) -> Option<VLockGuard> {
         if !self.is_locked.load(Ordering::Relaxed) {
             if let Ok(_) = self.is_locked.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire) {
@@ -27,6 +28,7 @@ impl VLock {
         return None;
     }
 
+    #[inline]
     pub fn lock(&self) -> VLockGuard {
         loop {
             if let Some(guard) = self.try_lock() {

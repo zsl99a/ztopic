@@ -43,12 +43,14 @@ where
             if let Some(_lock) = self.stream_lock.try_lock() {
                 let mut idx = 0;
 
-                while let Poll::Ready(Some(item)) = self.stream.poll_next_unpin(cx) {
-                    self.buffer[self.cursor] = Some(item);
+                let mut cursor = self.cursor;
 
-                    self.cursor += 1;
-                    if self.cursor >= self.buffer.len() {
-                        self.cursor = 0;
+                while let Poll::Ready(Some(item)) = self.stream.poll_next_unpin(cx) {
+                    self.buffer[cursor] = Some(item);
+
+                    cursor += 1;
+                    if cursor >= self.buffer.len() {
+                        cursor = 0;
                     }
 
                     idx += 1;
@@ -56,6 +58,8 @@ where
                         break;
                     }
                 }
+
+                self.cursor = cursor;
 
                 if stream_cursor != self.cursor {
                     self.wake_all();
@@ -70,11 +74,13 @@ where
         }
     }
 
+    #[inline]
     fn push_waker(&mut self, cx: &mut Context<'_>) {
         let _lock = self.wakers_lock.lock();
         self.wakers.push(cx.waker().clone());
     }
 
+    #[inline]
     fn wake_all(&mut self) {
         let _lock = self.wakers_lock.lock();
         for waker in self.wakers.drain(..) {
@@ -123,6 +129,7 @@ where
     St: Stream + Unpin,
     St::Item: Clone,
 {
+    #[inline]
     fn poll_receive(&mut self, cx: &mut Context<'_>) -> Poll<Option<St::Item>> {
         unsafe {
             let buffer = &mut *self.buffer.load(Ordering::Relaxed);

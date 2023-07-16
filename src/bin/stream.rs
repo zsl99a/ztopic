@@ -1,23 +1,23 @@
 use std::time::Instant;
 
-use futures::StreamExt;
+use futures::{StreamExt, SinkExt};
 use helium::SharedStream;
-use tokio::time::Duration;
+use tokio::{time::Duration, task::yield_now};
 
 #[tokio::main]
 async fn main() {
     let all = 10000;
 
-    // let (mut tx, rx) = futures::channel::mpsc::channel(32);
+    let (mut tx, rx) = futures::channel::mpsc::channel(32);
 
-    // tokio::spawn(async move {
-    //     for i in 0..all {
-    //         tx.send(i).await.unwrap();
-    //         yield_now().await;
-    //     }
-    // });
+    tokio::spawn(async move {
+        for i in 0..all {
+            tx.send(i).await.unwrap();
+            yield_now().await;
+        }
+    });
 
-    let rx = futures::stream::iter(0..all).map(|i| i);
+    // let rx = futures::stream::iter(0..all).map(|i| i);
 
     let s = SharedStream::new(rx);
 
@@ -28,12 +28,14 @@ async fn main() {
             let ins = Instant::now();
 
             while let Some(i) = s.next().await {
-                // println!("a = {:?}", i);
+                println!("a = {:?}", i);
 
                 if i == all - 1 {
-                    println!("i = {}, time = {:?}", i, ins.elapsed());
+                    println!("a = {}, time = {:?}", i, ins.elapsed());
                 }
             }
+
+            println!("a = {}, time = {:?}", all - 1, ins.elapsed());
         }
     });
 
@@ -44,12 +46,14 @@ async fn main() {
             let ins = Instant::now();
 
             while let Some(i) = s.next().await {
-                // println!("a = {:?}", i);
+                println!("b = {:?}", i);
 
                 if i == all - 1 {
-                    println!("i = {}, time = {:?}", i, ins.elapsed());
+                    println!("b = {}, time = {:?}", i, ins.elapsed());
                 }
             }
+
+            println!("b = {}, time = {:?}", all - 1, ins.elapsed());
         }
     });
 
@@ -60,12 +64,14 @@ async fn main() {
             let ins = Instant::now();
 
             while let Some(i) = s.next().await {
-                // println!("a = {:?}", i);
+                println!("c = {:?}", i);
 
                 if i == all - 1 {
-                    println!("i = {}, time = {:?}", i, ins.elapsed());
+                    println!("c = {}, time = {:?}", i, ins.elapsed());
                 }
             }
+
+            println!("c = {}, time = {:?}", all - 1, ins.elapsed());
         }
     });
 
@@ -76,12 +82,14 @@ async fn main() {
             let ins = Instant::now();
 
             while let Some(i) = s.next().await {
-                // println!("a = {:?}", i);
+                println!("d = {:?}", i);
 
                 if i == all - 1 {
-                    println!("i = {}, time = {:?}", i, ins.elapsed());
+                    println!("d = {}, time = {:?}", i, ins.elapsed());
                 }
             }
+
+            println!("d = {}, time = {:?}", all - 1, ins.elapsed());
         }
     });
 
@@ -92,14 +100,16 @@ async fn main() {
             let ins = Instant::now();
 
             while let Some(i) = s.next().await {
-                // println!("a = {:?}", i);
+                println!("e = {:?}", i);
 
                 if i == all - 1 {
-                    println!("i = {}, time = {:?}", i, ins.elapsed());
+                    println!("e = {}, time = {:?}", i, ins.elapsed());
                 }
             }
+
+            println!("e = {}, time = {:?}", all - 1, ins.elapsed());
         }
     });
 
-    tokio::time::sleep(Duration::from_secs(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
 }
