@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use futures::{channel::mpsc, stream::BoxStream, SinkExt, StreamExt};
+use futures::stream::BoxStream;
 
 use crate::{SharedStream, VLock};
 
@@ -179,42 +179,4 @@ pub trait Topic<'a, S> {
     fn topic(&self) -> String;
 
     fn init(&self, manager: &mut TopicManager<S>) -> BoxStream<'a, Result<Self::Output, Self::Error>>;
-}
-
-pub struct MyTopic {
-    name: String,
-}
-
-impl MyTopic {
-    pub fn new(name: String) -> Self {
-        Self { name }
-    }
-}
-
-impl<'a, S> Topic<'a, S> for MyTopic {
-    type Output = usize;
-
-    type Error = ();
-
-    fn topic(&self) -> String {
-        format!("{}", self.name)
-    }
-
-    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'a, Result<Self::Output, Self::Error>> {
-        let (mut tx, rx) = mpsc::channel(32);
-
-        tokio::spawn(async move {
-            for i in 0..300 {
-                tx.send(i).await.unwrap();
-                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-            }
-        });
-
-        rx.scan(0, |f, _i| {
-            *f += 1;
-            futures::future::ready(Some(*f))
-        })
-        .map(|i| Ok(i))
-        .boxed()
-    }
 }

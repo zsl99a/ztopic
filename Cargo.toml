@@ -17,8 +17,8 @@ s2n-quic = "1"
 rustls-pemfile = "1"
 
 serde = "1"
-bincode = "1"
-tokio-serde = { version = "0", features = ["bincode"] }
+rmp-serde = "1"
+tokio-serde = { version = "0", features = ["messagepack"] }
 
 async-stream = "0"
 
@@ -35,6 +35,10 @@ criterion = "0"
 
 [[bench]]
 name = "shared"
+harness = false
+
+[[bench]]
+name = "lock"
 harness = false
 
 [profile.release]

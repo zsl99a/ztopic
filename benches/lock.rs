@@ -1,44 +1,11 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-
-struct AtomicLock {
-    is_locked: Arc<AtomicBool>,
-}
-
-impl AtomicLock {
-    pub fn new() -> Self {
-        Self {
-            is_locked: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    pub fn try_lock(&self) -> Option<Self> {
-        if !self.is_locked.load(Ordering::Relaxed) {
-            if let Ok(_) = self.is_locked.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire) {
-                return Some(Self {
-                    is_locked: self.is_locked.clone(),
-                });
-            }
-        }
-        return None;
-    }
-}
-
-impl Drop for AtomicLock {
-    fn drop(&mut self) {
-        self.is_locked.store(false, Ordering::Relaxed);
-    }
-}
+use helium::VLock;
 
 fn lock(n: usize) {
-    let x = AtomicLock::new();
+    let x = VLock::new();
 
     for _ in 0..n {
-        x.try_lock();
+        x.lock();
     }
 }
 
