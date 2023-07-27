@@ -6,29 +6,28 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1"
+parking_lot = "0"
+
 async-trait = "0"
 futures = "0"
-flume = "0"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0", features = ["codec"] }
 pin-project-lite = "0"
+async-stream = "0"
 
-s2n-quic = "1"
+tarpc = { version = "0", features = ["full"] }
+s2n-quic = { version = "1", default-features = false, features = ["provider-address-token-default", "provider-tls-rustls", "provider-event-tracing"] }
 rustls-pemfile = "1"
 
 serde = "1"
 rmp-serde = "1"
+serde_json = "1"
 tokio-serde = { version = "0", features = ["messagepack"] }
 
-async-stream = "0"
-
-rbson = "2"
-im = "15"
-
 rbs = "4"
-serde_json = "1"
-
-parking_lot = "0"
+rbson = "2"
+rand = "0"
 
 [dev-dependencies]
 criterion = "0"

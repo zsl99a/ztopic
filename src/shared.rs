@@ -1,13 +1,10 @@
 use std::{
     pin::Pin,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
+    sync::atomic::{AtomicPtr, Ordering},
     task::{Context, Poll, Waker},
 };
 
-use futures::{Stream, StreamExt};
+use futures::{Sink, SinkExt, Stream, StreamExt};
 
 use crate::VLock;
 
@@ -18,6 +15,7 @@ where
     stream: St,
     buffer: Vec<Option<St::Item>>,
     cursor: usize,
+    // Warning:
     // 任何情况下都应该先拿 stream_lock 再拿 wakers_lock, 否则可能会死锁
     stream_lock: VLock,
     wakers: Vec<Waker>,
@@ -40,6 +38,7 @@ where
         }
     }
 
+    #[inline]
     fn poll_receive(&mut self, cx: &mut Context<'_>, stream_cursor: usize) -> Poll<Option<St::Item>> {
         if stream_cursor == self.cursor {
             if let Some(_lock) = self.stream_lock.try_lock() {
@@ -70,7 +69,7 @@ where
     }
 
     #[inline]
-    fn repair(&mut self, item: St::Item) {
+    fn insert(&mut self, item: St::Item) {
         let _lock = self.stream_lock.lock();
         self.buffer[self.cursor] = Some(item);
         self.cursor();
@@ -105,7 +104,7 @@ where
     St: Stream + Unpin,
     St::Item: Clone,
 {
-    buffer: Arc<AtomicPtr<SharedBuffer<St>>>,
+    buffer: AtomicPtr<SharedBuffer<St>>,
     cursor: usize,
 }
 
@@ -116,8 +115,8 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            buffer: self.buffer.clone(),
-            cursor: unsafe { &mut *self.buffer.load(Ordering::Relaxed) }.cursor,
+            buffer: AtomicPtr::new(self.buffer.load(Ordering::Relaxed)),
+            cursor: self.shared().cursor,
         }
     }
 }
@@ -129,16 +128,19 @@ where
 {
     pub fn new(stream: St) -> Self {
         Self {
-            buffer: Arc::new(AtomicPtr::new(Box::into_raw(Box::new(SharedBuffer::new(stream))))),
+            buffer: AtomicPtr::new(Box::into_raw(Box::new(SharedBuffer::new(stream)))),
             cursor: 0,
         }
     }
 
     #[inline]
-    pub fn repair(&mut self, item: St::Item) {
-        unsafe {
-            (&mut *self.buffer.load(Ordering::Relaxed)).repair(item);
-        }
+    pub fn insert(&mut self, item: St::Item) {
+        self.shared().insert(item);
+    }
+
+    #[inline]
+    fn shared(&self) -> &mut SharedBuffer<St> {
+        unsafe { &mut *self.buffer.load(Ordering::Relaxed) }
     }
 }
 
@@ -178,26 +180,26 @@ where
     }
 }
 
-// impl<St> Sink<St::Item> for SharedStream<St>
-// where
-//     St: Stream + Unpin,
-//     St::Item: Clone,
-// {
-//     type Error = ();
+impl<St, SinkItem> Sink<SinkItem> for SharedStream<St>
+where
+    St: Stream + Sink<SinkItem> + Unpin,
+    St::Item: Clone,
+{
+    type Error = St::Error;
 
-//     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         todo!()
-//     }
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.shared().stream.poll_ready_unpin(cx)
+    }
 
-//     fn start_send(self: Pin<&mut Self>, item: St::Item) -> Result<(), Self::Error> {
-//         todo!()
-//     }
+    fn start_send(self: Pin<&mut Self>, item: SinkItem) -> Result<(), Self::Error> {
+        self.shared().stream.start_send_unpin(item)
+    }
 
-//     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         todo!()
-//     }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.shared().stream.poll_flush_unpin(cx)
+    }
 
-//     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-//         todo!()
-//     }
-// }
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.shared().stream.poll_close_unpin(cx)
+    }
+}

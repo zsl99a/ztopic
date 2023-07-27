@@ -2,6 +2,7 @@ use std::{
     any::{Any, TypeId},
     collections::HashMap,
     ops::{Deref, DerefMut},
+    ptr::NonNull,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -40,7 +41,7 @@ where
         T::Output: Send + Sync + Clone + 'static,
         T::Error: Send + Sync + Clone + 'static,
     {
-        TopicToken::new(self, topic)
+        TopicToken::new(NonNull::from(self), topic)
     }
 
     pub fn store(&self) -> &S {
@@ -57,7 +58,7 @@ where
 {
     topic_id: (TypeId, String),
     stream: SharedStream<BoxStream<'static, Result<T::Output, T::Error>>>,
-    manager: *mut TopicManager<S>,
+    manager: NonNull<TopicManager<S>>,
     strong: Arc<AtomicUsize>,
 }
 
@@ -68,27 +69,31 @@ where
     T::Error: Send + Sync + Clone + 'static,
     S: 'static,
 {
-    pub fn new(manager: &mut TopicManager<S>, topic: T) -> Self {
-        let _lock = manager.drop_lock.lock();
+    pub fn new(mut manager: NonNull<TopicManager<S>>, topic: T) -> Self {
+        unsafe {
+            let ptr = manager.as_mut();
 
-        let topic_id = (TypeId::of::<T>(), topic.topic());
+            let _lock = ptr.drop_lock.lock();
 
-        if let Some(topic) = manager.topics.get(&topic_id) {
-            if let Some(topic) = topic.downcast_ref::<Self>() {
-                return topic.clone();
+            let topic_id = (TypeId::of::<T>(), topic.topic());
+
+            if let Some(topic) = ptr.topics.get(&topic_id) {
+                if let Some(topic) = topic.downcast_ref::<Self>() {
+                    return topic.clone();
+                }
             }
+
+            let token = Self {
+                topic_id: topic_id.clone(),
+                stream: SharedStream::new(topic.init(ptr)),
+                manager: manager.clone(),
+                strong: Arc::new(AtomicUsize::new(0)),
+            };
+
+            ptr.topics.insert(topic_id, Box::new(token.clone()));
+
+            token
         }
-
-        let token = Self {
-            topic_id: topic_id.clone(),
-            stream: SharedStream::new(topic.init(manager)),
-            manager,
-            strong: Arc::new(AtomicUsize::new(0)),
-        };
-
-        manager.topics.insert(topic_id, Box::new(token.clone()));
-
-        token
     }
 }
 
@@ -148,7 +153,7 @@ where
         Self {
             topic_id: self.topic_id.clone(),
             stream: self.stream.clone(),
-            manager: self.manager,
+            manager: self.manager.clone(),
             strong: self.strong.clone(),
         }
     }
@@ -164,8 +169,9 @@ where
     fn drop(&mut self) {
         if self.strong.fetch_sub(1, Ordering::SeqCst) == 1 {
             unsafe {
-                let _lock = (*self.manager).drop_lock.lock();
-                (*self.manager).topics.remove(&self.topic_id);
+                let manager = self.manager.as_mut();
+                let _lock = manager.drop_lock.lock();
+                manager.topics.remove(&self.topic_id);
             }
         }
     }
