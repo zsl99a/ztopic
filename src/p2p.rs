@@ -1,12 +1,12 @@
-use std::{fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, net::SocketAddr, pin::Pin, sync::Arc};
 
 use anyhow::Result;
-use futures::{StreamExt, TryStreamExt};
+use futures::{pin_mut, Future, FutureExt, StreamExt};
 use parking_lot::Mutex;
-use s2n_quic::{connection::Handle, provider::event::default::Subscriber, Client, Connection};
-use serde::{de::DeserializeOwned, Serialize};
-use tokio_serde::formats::MessagePack;
-use tokio_util::codec::LengthDelimitedCodec;
+use s2n_quic::{client::Connect, connection::Handle, provider::event::default::Subscriber, stream::BidirectionalStream, Client, Connection};
+use serde::{Deserialize, Serialize};
+use tokio_serde::formats;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 use crate::MtlsProvider;
 
@@ -25,54 +25,95 @@ pub static MY_KEY_PEM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server
 pub struct P2pRt {
     client: Client,
     node: Arc<Mutex<Node>>,
+    service: Arc<Service>,
 }
 
 impl P2pRt {
-    pub async fn new() -> Result<Self> {
+    pub async fn new(service: Service) -> Result<Self> {
         Ok(Self {
             client: create_client("[::1]:0".parse()?).await?,
             node: Arc::new(Mutex::new(Node::new())),
+            service: Arc::new(service),
         })
     }
 }
 
 impl P2pRt {
-    pub async fn spawn_with_addr<Msg>(&self, addr: SocketAddr) -> Result<Self>
-    where
-        Msg: DeserializeOwned + Serialize + Debug + Send + Sync + 'static,
-    {
-        tokio::spawn({
-            let this = self.clone();
+    pub async fn spawn_with_addr(self, addr: SocketAddr) -> Result<Self> {
+        let this = self.clone();
 
-            let mut server = create_server(addr).await?;
-            println!("server addr: {}", server.local_addr()?);
+        let mut server = create_server(addr).await?;
+        println!("server addr: {}", server.local_addr()?);
 
-            async move {
-                while let Some(conn) = server.accept().await {
-                    tokio::spawn(this.clone().serve::<Msg>(conn));
-                }
+        tokio::spawn(async move {
+            while let Some(conn) = server.accept().await {
+                tokio::spawn(this.clone().serve(conn));
             }
         });
 
         Ok(self.clone())
     }
 
-    async fn serve<Msg>(self, conn: Connection)
-    where
-        Msg: DeserializeOwned + Serialize + Debug + Send + Sync + 'static,
-    {
+    async fn serve(self, conn: Connection) {
         let (handle, mut acceptor) = conn.split();
 
-        while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
-            let framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
-            let mut serde_io = Box::pin(tokio_serde::Framed::<_, Msg, Msg, _>::new(framed_io, MessagePack::<Msg, Msg>::default()));
+        self.node.lock().peers.push(Peer::new(handle.clone()));
 
-            // if let Some(Ok(msg)) = serde_io.next().await {
-            //     println!("msg = {:?}", msg);
-            // }
+        while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
+            let this = self.clone();
+            let handle = handle.clone();
+
+            tokio::spawn(async move {
+                let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
+
+                let bytes = framed_io.next().await.ok_or(anyhow::anyhow!("no bytes"))??;
+                let negotiate = rmp_serde::from_slice::<Negotiate>(&bytes).map_err(|e| anyhow::anyhow!("rmp_serde::from_slice: {}", e))?;
+
+                let handler = this.service.svcs.get(&negotiate.handler).ok_or(anyhow::anyhow!("no handler"))?;
+
+                handler(framed_io, this.clone()).await;
+
+                Result::<()>::Ok(())
+            });
         }
+
+        self.node.lock().peers.retain(|peer| peer.openner.remote_addr() != handle.remote_addr());
     }
 }
+
+pub fn framed_msgpack<Msg>(
+    framed_io: Framed<BidirectionalStream, LengthDelimitedCodec>,
+) -> tokio_serde::Framed<Framed<BidirectionalStream, LengthDelimitedCodec>, Msg, Msg, formats::MessagePack<Msg, Msg>> {
+    tokio_serde::Framed::new(framed_io, formats::MessagePack::default())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Negotiate {
+    handler: HandlerSymbol,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct HandlerSymbol(String);
+
+impl HandlerSymbol {
+    pub fn new<I: Into<String>>(name: I) -> Self {
+        Self(name.into())
+    }
+}
+
+impl From<&str> for HandlerSymbol {
+    fn from(name: &str) -> Self {
+        Self::new(name)
+    }
+}
+
+impl From<String> for HandlerSymbol {
+    fn from(name: String) -> Self {
+        Self::new(name)
+    }
+}
+
+// =====
 
 pub struct Node {
     peers: Vec<Peer>,
@@ -91,6 +132,28 @@ pub struct Peer {
 impl Peer {
     pub fn new(openner: Handle) -> Self {
         Self { openner }
+    }
+}
+
+pub struct Service {
+    svcs:
+        HashMap<HandlerSymbol, Box<dyn Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
+}
+
+impl Service {
+    pub fn new() -> Self {
+        Self { svcs: HashMap::new() }
+    }
+
+    pub fn add_handler<S, H, F>(mut self, name: S, handler: H) -> Self
+    where
+        S: Into<HandlerSymbol>,
+        H: Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> F + Send + Sync + 'static,
+        F: Future<Output = ()> + Send + 'static,
+    {
+        self.svcs
+            .insert(name.into(), Box::new(move |framed_io, p2p_rt| Box::pin(handler(framed_io, p2p_rt))));
+        self
     }
 }
 
