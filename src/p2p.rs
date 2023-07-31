@@ -37,7 +37,7 @@ impl P2pRt {
         })
     }
 
-    pub async fn open_stream(&self, addr: SocketAddr, symbol: impl Into<HandlerSymbol>) -> Result<Framed<BidirectionalStream, LengthDelimitedCodec>> {
+    pub async fn open_stream(&self, addr: SocketAddr, service_name: impl Into<ServiceName>) -> Result<Framed<BidirectionalStream, LengthDelimitedCodec>> {
         if self.node.lock().peers.iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
             let mut conn = self.client.connect(Connect::new(addr).with_server_name("localhost")).await?;
             conn.keep_alive(true)?;
@@ -57,7 +57,7 @@ impl P2pRt {
         let stream = openner.open_bidirectional_stream().await?;
         let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
 
-        let negotiate = Negotiate { handler: symbol.into() };
+        let negotiate = Negotiate { service_name: service_name.into() };
         framed_io.send(rmp_serde::to_vec(&negotiate)?.into()).await?;
 
         Ok(framed_io)
@@ -95,7 +95,7 @@ impl P2pRt {
                     let bytes = framed_io.next().await.ok_or(anyhow::anyhow!("no bytes"))??;
                     let negotiate = rmp_serde::from_slice::<Negotiate>(&bytes).map_err(|e| anyhow::anyhow!("rmp_serde::from_slice: {}", e))?;
 
-                    let handler = this.service.svcs.get(&negotiate.handler).ok_or(anyhow::anyhow!("no handler"))?;
+                    let handler = this.service.svcs.get(&negotiate.service_name).ok_or(anyhow::anyhow!("no handler"))?;
 
                     handler(framed_io, this.clone()).await;
 
@@ -116,25 +116,25 @@ pub fn framed_msgpack<Msg>(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Negotiate {
-    handler: HandlerSymbol,
+    service_name: ServiceName,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct HandlerSymbol(String);
+pub struct ServiceName(String);
 
-impl HandlerSymbol {
+impl ServiceName {
     pub fn new<I: Into<String>>(name: I) -> Self {
         Self(name.into())
     }
 }
 
-impl From<&str> for HandlerSymbol {
+impl From<&str> for ServiceName {
     fn from(name: &str) -> Self {
         Self::new(name)
     }
 }
 
-impl From<String> for HandlerSymbol {
+impl From<String> for ServiceName {
     fn from(name: String) -> Self {
         Self::new(name)
     }
@@ -166,7 +166,7 @@ impl Peer {
 
 pub struct Service {
     svcs:
-        HashMap<HandlerSymbol, Box<dyn Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
+        HashMap<ServiceName, Box<dyn Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
 }
 
 impl Service {
@@ -174,9 +174,9 @@ impl Service {
         Self { svcs: HashMap::new() }
     }
 
-    pub fn add_handler<S, H, F>(mut self, name: S, handler: H) -> Self
+    pub fn add_service<S, H, F>(mut self, name: S, handler: H) -> Self
     where
-        S: Into<HandlerSymbol>,
+        S: Into<ServiceName>,
         H: Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> F + Send + Sync + 'static,
         F: Future<Output = ()> + Send + 'static,
     {

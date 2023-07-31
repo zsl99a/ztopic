@@ -1,5 +1,5 @@
 use futures::{SinkExt, StreamExt};
-use helium::{framed_msgpack, HandlerSymbol, P2pRt, Service};
+use helium::{framed_msgpack, ServiceName, P2pRt, Service};
 use s2n_quic::stream::BidirectionalStream;
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::LengthDelimitedCodec;
@@ -8,7 +8,7 @@ use tokio_util::codec::LengthDelimitedCodec;
 async fn main() -> anyhow::Result<()> {
     P2pRt::new(
         Service::new()
-            .add_handler(HandlerSymbol::new("master"), |framed_io, p2p_rt| async move {
+            .add_service(ServiceName::new("master"), |framed_io, p2p_rt| async move {
                 let mut framed_serde = framed_msgpack::<Msg>(framed_io);
 
                 println!("master");
@@ -20,10 +20,10 @@ async fn main() -> anyhow::Result<()> {
                     anyhow::Result::<()>::Ok(())
                 });
             })
-            .add_handler(HandlerSymbol::new("quote"), |framed_io, p2p_rt| async move {
+            .add_service(ServiceName::new("quote"), |framed_io, p2p_rt| async move {
                 let framed_serde = framed_msgpack::<Msg>(framed_io);
             })
-            .add_handler(HandlerSymbol::new("node"), |framed_io, p2p_rt| async move {
+            .add_service(ServiceName::new("node"), |framed_io, p2p_rt| async move {
                 ChildService::new(framed_io, p2p_rt).spawn().await;
             }),
     )
