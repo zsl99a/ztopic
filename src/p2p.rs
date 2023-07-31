@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Debug, net::SocketAddr, pin::Pin, sync::Arc};
 
 use anyhow::Result;
-use futures::{pin_mut, Future, FutureExt, StreamExt};
+use futures::{Future, SinkExt, StreamExt};
 use parking_lot::Mutex;
 use s2n_quic::{client::Connect, connection::Handle, provider::event::default::Subscriber, stream::BidirectionalStream, Client, Connection};
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,32 @@ impl P2pRt {
             service: Arc::new(service),
         })
     }
+
+    pub async fn open_stream(&self, addr: SocketAddr, symbol: impl Into<HandlerSymbol>) -> Result<Framed<BidirectionalStream, LengthDelimitedCodec>> {
+        if self.node.lock().peers.iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
+            let mut conn = self.client.connect(Connect::new(addr).with_server_name("localhost")).await?;
+            conn.keep_alive(true)?;
+            tokio::spawn(self.clone().serve(conn));
+        }
+
+        let mut openner = self
+            .node
+            .lock()
+            .peers
+            .iter()
+            .find(|peer| peer.openner.remote_addr() == Ok(addr))
+            .ok_or(anyhow::anyhow!("no peer"))?
+            .openner
+            .clone();
+
+        let stream = openner.open_bidirectional_stream().await?;
+        let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
+
+        let negotiate = Negotiate { handler: symbol.into() };
+        framed_io.send(rmp_serde::to_vec(&negotiate)?.into()).await?;
+
+        Ok(framed_io)
+    }
 }
 
 impl P2pRt {
@@ -61,7 +87,6 @@ impl P2pRt {
 
         while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
             let this = self.clone();
-            let handle = handle.clone();
 
             tokio::spawn(async move {
                 let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
@@ -115,6 +140,7 @@ impl From<String> for HandlerSymbol {
 
 // =====
 
+#[derive(Debug, Clone)]
 pub struct Node {
     peers: Vec<Peer>,
 }
@@ -125,6 +151,7 @@ impl Node {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Peer {
     openner: Handle,
 }

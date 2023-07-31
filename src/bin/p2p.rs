@@ -1,20 +1,48 @@
+use futures::{SinkExt, StreamExt};
 use helium::{framed_msgpack, HandlerSymbol, P2pRt, Service};
+use s2n_quic::stream::BidirectionalStream;
 use serde::{Deserialize, Serialize};
+use tokio_util::codec::LengthDelimitedCodec;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     P2pRt::new(
         Service::new()
-            .add_handler(HandlerSymbol::new("demo"), |framed_io, p2p_rt| async move {
+            .add_handler(HandlerSymbol::new("master"), |framed_io, p2p_rt| async move {
+                let mut framed_serde = framed_msgpack::<Msg>(framed_io);
+
+                println!("master");
+
+                tokio::spawn(async move {
+                    while let Some(Ok(msg)) = framed_serde.next().await {
+                        framed_serde.send(msg).await?;
+                    }
+                    anyhow::Result::<()>::Ok(())
+                });
+            })
+            .add_handler(HandlerSymbol::new("quote"), |framed_io, p2p_rt| async move {
                 let framed_serde = framed_msgpack::<Msg>(framed_io);
             })
-            .add_handler(HandlerSymbol::new("demo2"), |framed_io, p2p_rt| async move {
-                let framed_serde = framed_msgpack::<Msg>(framed_io);
+            .add_handler(HandlerSymbol::new("node"), |framed_io, p2p_rt| async move {
+                ChildService::new(framed_io, p2p_rt).spawn().await;
             }),
     )
     .await?
-    .spawn_with_addr("[::]:0".parse()?)
+    .spawn_with_addr("[::]:31234".parse()?)
     .await?;
+
+    let p2p_rt = P2pRt::new(Service::new()).await?.spawn_with_addr("[::]:31235".parse()?).await?;
+
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    let framed_io = p2p_rt.open_stream("[::1]:31234".parse()?, "master").await?;
+    let mut framed_serde = framed_msgpack::<Msg>(framed_io);
+
+    framed_serde.send(Msg { id: 1, name: "hello".into() }).await?;
+
+    while let Some(Ok(msg)) = framed_serde.next().await {
+        println!("recv: {:?}", msg);
+    }
 
     Ok(())
 }
@@ -23,4 +51,14 @@ async fn main() -> anyhow::Result<()> {
 pub struct Msg {
     pub id: u64,
     pub name: String,
+}
+
+pub struct ChildService {}
+
+impl ChildService {
+    pub fn new(framed_io: tokio_util::codec::Framed<BidirectionalStream, LengthDelimitedCodec>, p2p_rt: P2pRt) -> Self {
+        Self {}
+    }
+
+    async fn spawn(&self) {}
 }
