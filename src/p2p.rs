@@ -31,7 +31,7 @@ pub struct P2pRt {
 impl P2pRt {
     pub async fn new(service: Service) -> Result<Self> {
         Ok(Self {
-            client: create_client("[::1]:0".parse()?).await?,
+            client: create_client("0.0.0.0:0".parse()?).await?,
             node: Arc::new(Mutex::new(Node::new())),
             service: Arc::new(service),
         })
@@ -41,7 +41,7 @@ impl P2pRt {
         if self.node.lock().peers.iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
             let mut conn = self.client.connect(Connect::new(addr).with_server_name("localhost")).await?;
             conn.keep_alive(true)?;
-            tokio::spawn(self.clone().serve(conn));
+            self.clone().serve(conn).await;
         }
 
         let mut openner = self
@@ -73,7 +73,7 @@ impl P2pRt {
 
         tokio::spawn(async move {
             while let Some(conn) = server.accept().await {
-                tokio::spawn(this.clone().serve(conn));
+                this.clone().serve(conn).await;
             }
         });
 
@@ -85,24 +85,26 @@ impl P2pRt {
 
         self.node.lock().peers.push(Peer::new(handle.clone()));
 
-        while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
-            let this = self.clone();
+        tokio::spawn(async move {
+            while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
+                let this = self.clone();
 
-            tokio::spawn(async move {
-                let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
+                tokio::spawn(async move {
+                    let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
 
-                let bytes = framed_io.next().await.ok_or(anyhow::anyhow!("no bytes"))??;
-                let negotiate = rmp_serde::from_slice::<Negotiate>(&bytes).map_err(|e| anyhow::anyhow!("rmp_serde::from_slice: {}", e))?;
+                    let bytes = framed_io.next().await.ok_or(anyhow::anyhow!("no bytes"))??;
+                    let negotiate = rmp_serde::from_slice::<Negotiate>(&bytes).map_err(|e| anyhow::anyhow!("rmp_serde::from_slice: {}", e))?;
 
-                let handler = this.service.svcs.get(&negotiate.handler).ok_or(anyhow::anyhow!("no handler"))?;
+                    let handler = this.service.svcs.get(&negotiate.handler).ok_or(anyhow::anyhow!("no handler"))?;
 
-                handler(framed_io, this.clone()).await;
+                    handler(framed_io, this.clone()).await;
 
-                Result::<()>::Ok(())
-            });
-        }
+                    Result::<()>::Ok(())
+                });
+            }
 
-        self.node.lock().peers.retain(|peer| peer.openner.remote_addr() != handle.remote_addr());
+            self.node.lock().peers.retain(|peer| peer.openner.remote_addr() != handle.remote_addr());
+        });
     }
 }
 

@@ -28,14 +28,14 @@ async fn main() -> anyhow::Result<()> {
             }),
     )
     .await?
-    .spawn_with_addr("[::]:31234".parse()?)
+    .spawn_with_addr("0.0.0.0:31234".parse()?)
     .await?;
 
-    let p2p_rt = P2pRt::new(Service::new()).await?.spawn_with_addr("[::]:31235".parse()?).await?;
+    let p2p_rt = P2pRt::new(Service::new()).await?.spawn_with_addr("0.0.0.0:31235".parse()?).await?;
 
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-    let framed_io = p2p_rt.open_stream("[::1]:31234".parse()?, "master").await?;
+    let framed_io = p2p_rt.open_stream("127.0.0.1:31234".parse()?, "master").await?;
     let mut framed_serde = framed_msgpack::<Msg>(framed_io);
 
     framed_serde.send(Msg { id: 1, name: "hello".into() }).await?;
