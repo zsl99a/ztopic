@@ -25,9 +25,9 @@ pub type FramedIO = Framed<BidirectionalStream, LengthDelimitedCodec>;
 
 #[derive(Clone)]
 pub struct P2pRt {
-    client: Client,
-    node: Arc<Mutex<Node>>,
-    service: Arc<Service>,
+    pub client: Client,
+    pub node: Arc<Mutex<Node>>,
+    pub service: Arc<Service>,
 }
 
 impl P2pRt {
@@ -99,7 +99,7 @@ impl P2pRt {
                     let bytes = framed_io.next().await.ok_or(anyhow::anyhow!("no bytes"))??;
                     let negotiate = rmp_serde::from_slice::<Negotiate>(&bytes).map_err(|e| anyhow::anyhow!("rmp_serde::from_slice: {}", e))?;
 
-                    let handler = this.service.svcs.get(&negotiate.service_name).ok_or(anyhow::anyhow!("no handler"))?;
+                    let handler = this.service.handlers.get(&negotiate.service_name).ok_or(anyhow::anyhow!("no handler"))?;
 
                     handler(framed_io, this.clone()).await;
 
@@ -146,7 +146,7 @@ impl From<String> for ServiceName {
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    peers: Vec<Peer>,
+    pub peers: Vec<Peer>,
 }
 
 impl Node {
@@ -167,12 +167,12 @@ impl Peer {
 }
 
 pub struct Service {
-    svcs: HashMap<ServiceName, Box<dyn Fn(FramedIO, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
+    handlers: HashMap<ServiceName, Box<dyn Fn(FramedIO, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
 }
 
 impl Service {
     pub fn new() -> Self {
-        Self { svcs: HashMap::new() }
+        Self { handlers: HashMap::new() }
     }
 
     pub fn add_service<S, H, F>(mut self, name: S, handler: H) -> Self
@@ -181,7 +181,7 @@ impl Service {
         H: Fn(FramedIO, P2pRt) -> F + Send + Sync + 'static,
         F: Future<Output = ()> + Send + 'static,
     {
-        self.svcs
+        self.handlers
             .insert(name.into(), Box::new(move |framed_io, p2p_rt| Box::pin(handler(framed_io, p2p_rt))));
         self
     }
