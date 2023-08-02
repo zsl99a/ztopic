@@ -1,35 +1,30 @@
 use futures::{SinkExt, StreamExt};
-use helium::{framed_msgpack, ServiceName, P2pRt, Service};
-use s2n_quic::stream::BidirectionalStream;
+use helium::{framed_msgpack, FramedIO, P2pRt, Service};
 use serde::{Deserialize, Serialize};
-use tokio_util::codec::LengthDelimitedCodec;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    P2pRt::new(
-        Service::new()
-            .add_service(ServiceName::new("master"), |framed_io, p2p_rt| async move {
-                let mut framed_serde = framed_msgpack::<Msg>(framed_io);
+    let service = Service::new()
+        .add_service("master", |framed_io, p2p_rt| async move {
+            let mut framed_serde = framed_msgpack::<Msg>(framed_io);
 
-                println!("master");
+            println!("master");
 
-                tokio::spawn(async move {
-                    while let Some(Ok(msg)) = framed_serde.next().await {
-                        framed_serde.send(msg).await?;
-                    }
-                    anyhow::Result::<()>::Ok(())
-                });
-            })
-            .add_service(ServiceName::new("quote"), |framed_io, p2p_rt| async move {
-                let framed_serde = framed_msgpack::<Msg>(framed_io);
-            })
-            .add_service(ServiceName::new("node"), |framed_io, p2p_rt| async move {
-                ChildService::new(framed_io, p2p_rt).spawn().await;
-            }),
-    )
-    .await?
-    .spawn_with_addr("0.0.0.0:31234".parse()?)
-    .await?;
+            tokio::spawn(async move {
+                while let Some(Ok(msg)) = framed_serde.next().await {
+                    framed_serde.send(msg).await?;
+                }
+                anyhow::Result::<()>::Ok(())
+            });
+        })
+        .add_service("quote", |framed_io, p2p_rt| async move {
+            let framed_serde = framed_msgpack::<Msg>(framed_io);
+        })
+        .add_service("node", |framed_io, p2p_rt| async move {
+            ChildService::new(framed_io, p2p_rt).spawn().await;
+        });
+
+    P2pRt::new(service).await?.spawn_with_addr("0.0.0.0:31234".parse()?).await?;
 
     let p2p_rt = P2pRt::new(Service::new()).await?.spawn_with_addr("0.0.0.0:31235".parse()?).await?;
 
@@ -56,7 +51,7 @@ pub struct Msg {
 pub struct ChildService {}
 
 impl ChildService {
-    pub fn new(framed_io: tokio_util::codec::Framed<BidirectionalStream, LengthDelimitedCodec>, p2p_rt: P2pRt) -> Self {
+    pub fn new(framed_io: FramedIO, p2p_rt: P2pRt) -> Self {
         Self {}
     }
 

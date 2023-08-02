@@ -21,6 +21,8 @@ pub static MY_KEY_PEM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/certs/server
 /// 4. master 节点返回 peer 和 master 节点的 services, 并保存到 node 实例
 ///
 
+pub type FramedIO = Framed<BidirectionalStream, LengthDelimitedCodec>;
+
 #[derive(Clone)]
 pub struct P2pRt {
     client: Client,
@@ -37,7 +39,7 @@ impl P2pRt {
         })
     }
 
-    pub async fn open_stream(&self, addr: SocketAddr, service_name: impl Into<ServiceName>) -> Result<Framed<BidirectionalStream, LengthDelimitedCodec>> {
+    pub async fn open_stream(&self, addr: SocketAddr, service_name: impl Into<ServiceName>) -> Result<FramedIO> {
         if self.node.lock().peers.iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
             let mut conn = self.client.connect(Connect::new(addr).with_server_name("localhost")).await?;
             conn.keep_alive(true)?;
@@ -57,7 +59,9 @@ impl P2pRt {
         let stream = openner.open_bidirectional_stream().await?;
         let mut framed_io = LengthDelimitedCodec::builder().max_frame_length(1024 * 1024 * 4).new_framed(stream);
 
-        let negotiate = Negotiate { service_name: service_name.into() };
+        let negotiate = Negotiate {
+            service_name: service_name.into(),
+        };
         framed_io.send(rmp_serde::to_vec(&negotiate)?.into()).await?;
 
         Ok(framed_io)
@@ -108,9 +112,7 @@ impl P2pRt {
     }
 }
 
-pub fn framed_msgpack<Msg>(
-    framed_io: Framed<BidirectionalStream, LengthDelimitedCodec>,
-) -> tokio_serde::Framed<Framed<BidirectionalStream, LengthDelimitedCodec>, Msg, Msg, formats::MessagePack<Msg, Msg>> {
+pub fn framed_msgpack<Msg>(framed_io: FramedIO) -> tokio_serde::Framed<FramedIO, Msg, Msg, formats::MessagePack<Msg, Msg>> {
     tokio_serde::Framed::new(framed_io, formats::MessagePack::default())
 }
 
@@ -165,8 +167,7 @@ impl Peer {
 }
 
 pub struct Service {
-    svcs:
-        HashMap<ServiceName, Box<dyn Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
+    svcs: HashMap<ServiceName, Box<dyn Fn(FramedIO, P2pRt) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>>,
 }
 
 impl Service {
@@ -177,7 +178,7 @@ impl Service {
     pub fn add_service<S, H, F>(mut self, name: S, handler: H) -> Self
     where
         S: Into<ServiceName>,
-        H: Fn(Framed<BidirectionalStream, LengthDelimitedCodec>, P2pRt) -> F + Send + Sync + 'static,
+        H: Fn(FramedIO, P2pRt) -> F + Send + Sync + 'static,
         F: Future<Output = ()> + Send + 'static,
     {
         self.svcs
