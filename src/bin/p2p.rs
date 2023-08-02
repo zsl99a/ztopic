@@ -11,7 +11,7 @@ use tarpc::{
 async fn main() -> Result<()> {
     let service = Service::new()
         .add_service("master", |framed_io, p2p_rt| async move {
-            NodeImpl.spawn(framed_io, p2p_rt);
+            NodeImpl.spawn(framed_io, p2p_rt).await;
         })
         .add_service("quote", |framed_io, p2p_rt| async move {
             let framed_serde = framed_msgpack::<Msg>(framed_io);
@@ -19,12 +19,9 @@ async fn main() -> Result<()> {
         .add_service("node", |framed_io, p2p_rt| async move {
             ChildService::new(framed_io, p2p_rt).spawn().await;
         });
-
-    let _s = P2pRt::new(service).await?.spawn_with_addr("0.0.0.0:31234".parse()?).await?;
+    P2pRt::new(service).await?.spawn_with_addr("0.0.0.0:31234".parse()?).await?;
 
     let p2p_rt = P2pRt::new(Service::new()).await?.spawn_with_addr("0.0.0.0:31235".parse()?).await?;
-
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let framed_io = p2p_rt.open_stream("127.0.0.1:31234".parse()?, "master").await?;
     let node_client = NodeClient::spawn(framed_io);
@@ -62,7 +59,7 @@ pub trait Node {
 impl NodeClient {
     fn spawn(framed_io: FramedIO) -> Self {
         let framed_serde = tarpc::serde_transport::new(framed_io, tokio_serde::formats::MessagePack::default());
-        NodeClient::new(tarpc::client::Config::default(), framed_serde).spawn()
+        Self::new(tarpc::client::Config::default(), framed_serde).spawn()
     }
 }
 
@@ -70,9 +67,9 @@ impl NodeClient {
 pub struct NodeImpl;
 
 impl NodeImpl {
-    pub fn spawn(self, framed_io: FramedIO, _p2p_rt: P2pRt) {
+    pub async fn spawn(self, framed_io: FramedIO, _p2p_rt: P2pRt) {
         let framed_serde = tarpc::serde_transport::new(framed_io, tokio_serde::formats::MessagePack::default());
-        tokio::spawn(BaseChannel::with_defaults(framed_serde).execute(self.serve()));
+        BaseChannel::with_defaults(framed_serde).execute(self.serve()).await
     }
 }
 
