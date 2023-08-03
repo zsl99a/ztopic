@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
         .add_service("master", |framed_io, p2p_rt| async move {
             NodeImpl.spawn(framed_io, p2p_rt).await;
         })
-        .add_service("quote", |framed_io, p2p_rt| async move {
+        .add_service("relay", |framed_io, p2p_rt| async move {
             let framed_serde = framed_msgpack::<Msg>(framed_io);
         })
         .add_service("node", |framed_io, p2p_rt| async move {

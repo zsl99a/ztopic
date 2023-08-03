@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, net::SocketAddr, pin::Pin, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, net::SocketAddr, ops::Deref, pin::Pin, sync::Arc};
 
 use anyhow::Result;
 use futures::{Future, SinkExt, StreamExt};
@@ -26,7 +26,7 @@ pub type FramedIO = Framed<BidirectionalStream, LengthDelimitedCodec>;
 #[derive(Clone)]
 pub struct P2pRt {
     pub client: Client,
-    pub node: Arc<Mutex<Node>>,
+    pub peers: Arc<Mutex<Vec<Peer>>>,
     pub service: Arc<Service>,
 }
 
@@ -34,24 +34,23 @@ impl P2pRt {
     pub async fn new(service: Service) -> Result<Self> {
         Ok(Self {
             client: create_client("0.0.0.0:0".parse()?).await?,
-            node: Arc::new(Mutex::new(Node::new())),
+            peers: Arc::new(Mutex::new(vec![])),
             service: Arc::new(service),
         })
     }
 
     pub async fn open_stream(&self, addr: SocketAddr, service_name: impl Into<ServiceName>) -> Result<FramedIO> {
-        if self.node.lock().peers.iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
+        if self.peers.lock().iter().find(|peer| peer.openner.remote_addr() == Ok(addr)).is_none() {
             let mut conn = self.client.connect(Connect::new(addr).with_server_name("localhost")).await?;
             conn.keep_alive(true)?;
             self.clone().serve(conn).await;
         }
 
         let mut openner = self
-            .node
-            .lock()
             .peers
+            .lock()
             .iter()
-            .find(|peer| peer.openner.remote_addr() == Ok(addr))
+            .find(|peer| peer.remote_addr() == Ok(addr))
             .ok_or(anyhow::anyhow!("no peer"))?
             .openner
             .clone();
@@ -87,7 +86,7 @@ impl P2pRt {
     async fn serve(self, conn: Connection) {
         let (handle, mut acceptor) = conn.split();
 
-        self.node.lock().peers.push(Peer::new(handle.clone()));
+        self.peers.lock().push(Peer::new(handle.clone()));
 
         tokio::spawn(async move {
             while let Ok(Some(stream)) = acceptor.accept_bidirectional_stream().await {
@@ -107,7 +106,7 @@ impl P2pRt {
                 });
             }
 
-            self.node.lock().peers.retain(|peer| peer.openner.remote_addr() != handle.remote_addr());
+            self.peers.lock().retain(|peer| peer.remote_addr() != handle.remote_addr());
         });
     }
 }
@@ -145,19 +144,16 @@ impl From<String> for ServiceName {
 // =====
 
 #[derive(Debug, Clone)]
-pub struct Node {
-    pub peers: Vec<Peer>,
-}
-
-impl Node {
-    pub fn new() -> Self {
-        Self { peers: Vec::new() }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Peer {
     openner: Handle,
+}
+
+impl Deref for Peer {
+    type Target = Handle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.openner
+    }
 }
 
 impl Peer {
