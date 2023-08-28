@@ -19,7 +19,7 @@ async fn main() {
 
     // let rx = futures::stream::iter(0..all).map(|i| i);
 
-    let s = SharedStream::new(rx);
+    let s = SharedStream::new(rx, 128, 16);
 
     tokio::spawn({
         let mut s = s.clone();

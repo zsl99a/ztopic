@@ -34,16 +34,16 @@ impl MyTopic {
     }
 }
 
-impl<'a, S> Topic<'a, S> for MyTopic {
+impl<S> Topic<S> for MyTopic {
     type Output = usize;
 
     type Error = ();
 
     fn topic(&self) -> String {
-        format!("{}", self.name)
+        self.name.clone()
     }
 
-    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'a, Result<Self::Output, Self::Error>> {
+    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let (mut tx, rx) = mpsc::channel(32);
 
         tokio::spawn(async move {
@@ -57,7 +57,7 @@ impl<'a, S> Topic<'a, S> for MyTopic {
             *f += 1;
             futures::future::ready(Some(*f))
         })
-        .map(|i| Ok(i))
+        .map(Ok)
         .boxed()
     }
 }

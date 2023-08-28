@@ -1,9 +1,10 @@
 use std::{
+    ptr::NonNull,
     sync::atomic::{AtomicBool, Ordering},
-    thread::yield_now, ptr::NonNull,
+    thread::yield_now,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VLock {
     pub is_locked: AtomicBool,
 }
@@ -21,12 +22,10 @@ impl VLock {
 
     #[inline]
     pub fn try_lock(&self) -> Option<VLockGuard> {
-        if !self.is_locked.load(Ordering::Relaxed) {
-            if let Ok(_) = self.is_locked.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire) {
-                return Some(VLockGuard { lock: NonNull::from(self) });
-            }
+        if !self.is_locked.load(Ordering::Relaxed) && self.is_locked.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            return Some(VLockGuard { lock: NonNull::from(self) });
         }
-        return None;
+        None
     }
 
     #[inline]
