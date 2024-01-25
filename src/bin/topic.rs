@@ -3,7 +3,7 @@ use helium::{Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {
-    let mut manager = TopicManager::new(());
+    let manager = TopicManager::new(());
 
     let mut topic = manager.topic(MyTopic::new("my".into()));
 
@@ -43,7 +43,7 @@ impl<S> Topic<S> for MyTopic {
         self.name.clone()
     }
 
-    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, _manager: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let (mut tx, rx) = mpsc::channel(32);
 
         tokio::spawn(async move {

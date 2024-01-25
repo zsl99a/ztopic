@@ -26,7 +26,7 @@ impl<S> Topic<S> for Interval {
         format!("{:?}", self.dur)
     }
 
-    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, _manager: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let dur = self.dur;
 
         let stream = async_stream::stream! {
@@ -61,7 +61,7 @@ impl<S> Topic<S> for Timeout {
         format!("{:?}", self.dur)
     }
 
-    fn init(&self, _manager: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, _manager: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let dur = self.dur;
 
         let stream = async_stream::stream! {

@@ -5,11 +5,11 @@ use helium::{Interval, Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {
-    let mut manager = TopicManager::new(());
+    // let mut manager = TopicManager::new(());
 
-    let mut topic_1 = manager.topic(CpuPressureTestTopic::new("cpu_pressure_test_1".to_string()));
+    // let mut topic_1 = manager.topic(CpuPressureTestTopic::new("cpu_pressure_test_1".to_string()));
 
-    let mut topic_2 = manager.topic(CpuPressureTestTopic::new("cpu_pressure_test_2".to_string()));
+    // let mut topic_2 = manager.topic(CpuPressureTestTopic::new("cpu_pressure_test_2".to_string()));
 
     // tokio::spawn({
     //     let mut topic_1 = topic_1.clone();
@@ -33,22 +33,24 @@ async fn main() {
     //     }
     // });
 
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                Some(i) = topic_1.next() => {
-                    if rand::random::<u64>() % 100 == 0 {
-                        println!("c = {:?}", i);
-                    }
-                }
-                Some(i) = topic_2.next() => {
-                    if rand::random::<u64>() % 100 == 0 {
-                        println!("c = {:?}", i);
-                    }
-                }
-            }
-        }
-    });
+    // tokio::spawn(async move {
+    //     loop {
+    //         tokio::select! {
+    //             Some(i) = topic_1.next() => {
+    //                 if rand::random::<u64>() % 100 == 0 {
+    //                     println!("c = {:?}", i);
+    //                 }
+    //                 println!("ins = {:?}", topic_1.elapsed());
+    //             }
+    //             Some(i) = topic_2.next() => {
+    //                 if rand::random::<u64>() % 100 == 0 {
+    //                     println!("c = {:?}", i);
+    //                 }
+    //                 println!("ins = {:?}", topic_2.elapsed());
+    //             }
+    //         }
+    //     }
+    // });
 
     // tokio::spawn(async move {
     //     let mut topic_all = select_all(vec![topic_1, topic_2]);
@@ -82,7 +84,7 @@ impl Topic<()> for CpuPressureTestTopic {
         self.name.clone()
     }
 
-    fn init(&self, manager: &mut TopicManager<()>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, manager: &TopicManager<()>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let interval = manager.topic(Interval::new(Duration::from_micros(1)));
         interval
             .map(|_| {

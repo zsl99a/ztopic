@@ -11,7 +11,7 @@ use helium::{Interval, Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {
-    let mut manager = TopicManager::new(());
+    let manager = TopicManager::new(());
 
     let mut topic = manager
         .topic(IntervalMulti::new(Duration::from_millis(10)))
@@ -67,7 +67,7 @@ impl<S: 'static> Topic<S> for IntervalMulti {
         format!("{:?}", self.dur)
     }
 
-    fn init(&self, manager: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, manager: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         let interval1 = manager.topic(Interval::new(self.dur));
         let interval2 = manager.topic(Interval::new(self.dur));
         select_all(vec![interval1, interval2]).boxed()

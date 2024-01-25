@@ -30,7 +30,7 @@ where
 
     type Error = Infallible;
 
-    fn init(&self, _: &mut TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
+    fn init(&self, _: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
         futures::stream::empty().boxed()
     }
 }
