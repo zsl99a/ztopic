@@ -17,7 +17,10 @@ impl Interval {
     }
 }
 
-impl<S> Topic<S> for Interval {
+impl<S> Topic<S> for Interval
+where
+    S: Send + Sync + 'static,
+{
     type Output = Instant;
 
     type Error = Infallible;
@@ -52,7 +55,10 @@ impl Timeout {
     }
 }
 
-impl<S> Topic<S> for Timeout {
+impl<S> Topic<S> for Timeout
+where
+    S: Send + Sync + 'static,
+{
     type Output = Instant;
 
     type Error = Infallible;

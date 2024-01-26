@@ -58,7 +58,10 @@ impl IntervalMulti {
     }
 }
 
-impl<S: 'static> Topic<S> for IntervalMulti {
+impl<S: 'static> Topic<S> for IntervalMulti
+where
+    S: Send + Sync + 'static,
+{
     type Output = Instant;
 
     type Error = Infallible;

@@ -34,7 +34,10 @@ impl MyTopic {
     }
 }
 
-impl<S> Topic<S> for MyTopic {
+impl<S> Topic<S> for MyTopic
+where
+    S: Send + Sync + 'static,
+{
     type Output = usize;
 
     type Error = ();

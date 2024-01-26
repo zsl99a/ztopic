@@ -3,11 +3,7 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     pin::Pin,
-    ptr::NonNull,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -19,15 +15,27 @@ use crate::{stream::SharedStream, GLOBAL_BATCH_SIZE, GLOBAL_CAPACITY};
 
 #[derive(Debug)]
 pub struct TopicManager<S> {
-    store: S,
-    topics: Mutex<HashMap<(TypeId, String), Box<dyn Any + Send + Sync>>>,
+    store: Arc<S>,
+    topics: Arc<Mutex<HashMap<(TypeId, String), Box<dyn Any + Send + Sync>>>>,
 }
 
-impl<S> TopicManager<S> {
+impl<S> Clone for TopicManager<S> {
+    fn clone(&self) -> Self {
+        Self {
+            store: self.store.clone(),
+            topics: self.topics.clone(),
+        }
+    }
+}
+
+impl<S> TopicManager<S>
+where
+    S: Send + Sync + 'static,
+{
     pub fn new(store: S) -> Self {
         Self {
-            store,
-            topics: Mutex::new(HashMap::new()),
+            store: Arc::new(store),
+            topics: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -37,7 +45,7 @@ impl<S> TopicManager<S> {
         T::Output: Send + Sync + Clone + 'static,
         T::Error: Send + Sync + Clone + 'static,
     {
-        TopicToken::new(topic, NonNull::from(self))
+        TopicToken::new(topic, self.clone())
     }
 
     pub fn store(&self) -> &S {
@@ -50,11 +58,11 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
-    S: 'static,
+    S: Send + Sync + 'static,
 {
     topic_id: (TypeId, String),
     stream: SharedStream<BoxStream<'static, Result<T::Output, T::Error>>>,
-    manager: AtomicPtr<TopicManager<S>>,
+    manager: TopicManager<S>,
     strong: Arc<()>,
 }
 
@@ -63,11 +71,10 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
-    pub fn new(topic: T, manager: NonNull<TopicManager<S>>) -> Self {
-        let ptr = unsafe { manager.as_ref() };
-
-        let topics = ptr.topics.lock();
+    pub fn new(topic: T, manager: TopicManager<S>) -> Self {
+        let topics = manager.topics.lock();
 
         let topic_id = (TypeId::of::<T>(), topic.topic());
 
@@ -82,12 +89,12 @@ where
 
             let token = Self {
                 topic_id: topic_id.clone(),
-                stream: SharedStream::new(topic.init(ptr), topic.capacity(), topic.batch_size()),
-                manager: AtomicPtr::new(manager.as_ptr()),
+                stream: SharedStream::new(topic.init(&manager), topic.capacity(), topic.batch_size()),
+                manager: manager.clone(),
                 strong: Arc::new(()),
             };
 
-            ptr.topics.lock().insert(topic_id, Box::new(token.clone()));
+            manager.topics.lock().insert(topic_id, Box::new(token.clone()));
 
             token
         };
@@ -107,12 +114,13 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
     fn clone(&self) -> Self {
         Self {
             topic_id: self.topic_id.clone(),
             stream: self.stream.clone(),
-            manager: AtomicPtr::new(self.manager.load(Ordering::Relaxed)),
+            manager: self.manager.clone(),
             strong: self.strong.clone(),
         }
     }
@@ -123,10 +131,10 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        let manager = unsafe { &mut *self.manager.load(Ordering::Relaxed) };
-        let mut lock = manager.topics.lock();
+        let mut lock = self.manager.topics.lock();
         if Arc::strong_count(&self.strong) == 2 {
             lock.remove(&self.topic_id);
         }
@@ -138,6 +146,7 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
     type Target = SharedStream<BoxStream<'static, Result<T::Output, T::Error>>>;
 
@@ -151,6 +160,7 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
@@ -162,6 +172,7 @@ where
     T: Topic<S> + Send + Sync + 'static,
     T::Output: Send + Sync + Clone + 'static,
     T::Error: Send + Sync + Clone + 'static,
+    S: Send + Sync + 'static,
 {
     type Item = Result<T::Output, T::Error>;
 
@@ -174,7 +185,10 @@ where
     }
 }
 
-pub trait Topic<S> {
+pub trait Topic<S>
+where
+    S: Send + Sync + 'static,
+{
     type Output;
 
     type Error;

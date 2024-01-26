@@ -25,6 +25,7 @@ impl<T, S> Default for EmptyTopic<T, S> {
 impl<T, S> Topic<S> for EmptyTopic<T, S>
 where
     T: Send + Sync + 'static,
+    S: Send + Sync + 'static,
 {
     type Output = T;
 

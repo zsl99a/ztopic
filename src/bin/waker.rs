@@ -42,7 +42,10 @@ impl Default for PublicEventTopic {
     }
 }
 
-impl<S> Topic<S> for PublicEventTopic {
+impl<S> Topic<S> for PublicEventTopic
+where
+    S: Send + Sync + 'static,
+{
     type Output = PublicEvent;
 
     type Error = Infallible;
