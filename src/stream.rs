@@ -31,7 +31,7 @@ where
         }
     }
 
-    pub fn insert(&self, item: S::Item) {
+    pub fn insert(&mut self, item: S::Item) {
         self.buffer_mut().insert(item);
     }
 }
@@ -45,7 +45,7 @@ where
         unsafe { &**self.buffer.as_ptr() }
     }
 
-    fn buffer_mut(&self) -> &mut SharedBuffer<S> {
+    fn buffer_mut(&mut self) -> &mut SharedBuffer<S> {
         unsafe { &mut **self.buffer.as_ptr() }
     }
 }
@@ -59,7 +59,7 @@ where
         Self {
             buffer: AtomicPtr::new(self.buffer.load(Ordering::Relaxed)),
             cursor: self.buffer().new_stream_cursor(),
-            stream_id: self.buffer_mut().new_stream_id(),
+            stream_id: self.buffer().new_stream_id(),
         }
     }
 }
@@ -70,7 +70,8 @@ where
     S::Item: Clone,
 {
     fn drop(&mut self) {
-        self.buffer_mut().drop_stream(self.stream_id);
+        let stream_id = self.stream_id;
+        self.buffer_mut().drop_stream(stream_id);
     }
 }
 
@@ -82,7 +83,10 @@ where
     type Item = S::Item;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let poll = self.buffer_mut().poll_receive(cx, self.cursor, self.stream_id);
+        let cursor = self.cursor;
+        let stream_id = self.stream_id;
+
+        let poll = self.buffer_mut().poll_receive(cx, cursor, stream_id);
 
         if poll.is_ready() {
             self.cursor += 1;
