@@ -21,7 +21,6 @@ use crate::{stream::SharedStream, GLOBAL_BATCH_SIZE, GLOBAL_CAPACITY};
 pub struct TopicManager<S> {
     store: S,
     topics: Mutex<HashMap<(TypeId, String), Box<dyn Any + Send + Sync>>>,
-    creating: Mutex<()>,
 }
 
 impl<S> TopicManager<S> {
@@ -29,7 +28,6 @@ impl<S> TopicManager<S> {
         Self {
             store,
             topics: Mutex::new(HashMap::new()),
-            creating: Mutex::new(()),
         }
     }
 
@@ -69,15 +67,7 @@ where
     pub fn new(topic: T, manager: NonNull<TopicManager<S>>) -> Self {
         let ptr = unsafe { manager.as_ref() };
 
-        // 这里为什么要尝试性加锁但不直接使用
-        // 是因为 topic 是递归创建的，这时候如果直接加锁会导致死锁
-        // 但是如果没有一个锁，则可能出现创建的同时所依赖的 topic 被 drop 的情况
-        let _lock = match ptr.creating.is_locked() {
-            true => None,
-            false => Some((ptr.topics.lock(), ptr.creating.lock())),
-        };
-
-        let topics = unsafe { &mut *ptr.topics.data_ptr() };
+        let topics = ptr.topics.lock();
 
         let topic_id = (TypeId::of::<T>(), topic.topic());
 
@@ -88,6 +78,8 @@ where
                 panic!("topic type mismatch")
             }
         } else {
+            drop(topics);
+
             let token = Self {
                 topic_id: topic_id.clone(),
                 stream: SharedStream::new(topic.init(ptr), topic.capacity(), topic.batch_size()),
@@ -95,7 +87,7 @@ where
                 strong: Arc::new(()),
             };
 
-            topics.insert(topic_id, Box::new(token.clone()));
+            ptr.topics.lock().insert(topic_id, Box::new(token.clone()));
 
             token
         };
