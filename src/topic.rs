@@ -4,7 +4,10 @@ use std::{
     ops::{Deref, DerefMut},
     pin::Pin,
     ptr::NonNull,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicPtr, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
@@ -53,7 +56,7 @@ where
 {
     topic_id: (TypeId, String),
     stream: SharedStream<BoxStream<'static, Result<T::Output, T::Error>>>,
-    manager: NonNull<TopicManager<S>>,
+    manager: AtomicPtr<TopicManager<S>>,
     strong: Arc<()>,
 }
 
@@ -88,7 +91,7 @@ where
             let token = Self {
                 topic_id: topic_id.clone(),
                 stream: SharedStream::new(topic.init(ptr), topic.capacity(), topic.batch_size()),
-                manager,
+                manager: AtomicPtr::new(manager.as_ptr()),
                 strong: Arc::new(()),
             };
 
@@ -117,7 +120,7 @@ where
         Self {
             topic_id: self.topic_id.clone(),
             stream: self.stream.clone(),
-            manager: self.manager,
+            manager: AtomicPtr::new(self.manager.load(Ordering::Relaxed)),
             strong: self.strong.clone(),
         }
     }
@@ -130,28 +133,12 @@ where
     T::Error: Send + Sync + Clone + 'static,
 {
     fn drop(&mut self) {
-        let manager = unsafe { self.manager.as_ref() };
+        let manager = unsafe { &mut *self.manager.load(Ordering::Relaxed) };
         let mut lock = manager.topics.lock();
         if Arc::strong_count(&self.strong) == 2 {
             lock.remove(&self.topic_id);
         }
     }
-}
-
-unsafe impl<T, S> Send for TopicToken<T, S>
-where
-    T: Topic<S> + Send + Sync + 'static,
-    T::Output: Send + Sync + Clone + 'static,
-    T::Error: Send + Sync + Clone + 'static,
-{
-}
-
-unsafe impl<T, S> Sync for TopicToken<T, S>
-where
-    T: Topic<S> + Send + Sync + 'static,
-    T::Output: Send + Sync + Clone + 'static,
-    T::Error: Send + Sync + Clone + 'static,
-{
 }
 
 impl<T, S> Deref for TopicToken<T, S>
