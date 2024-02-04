@@ -134,9 +134,16 @@ where
     S: Send + Sync + 'static,
 {
     fn drop(&mut self) {
-        let mut lock = self.manager.topics.lock();
         if Arc::strong_count(&self.strong) == 2 {
-            lock.remove(&self.topic_id);
+            let strong = self.strong.clone();
+            let topic_id = self.topic_id.clone();
+            let topics = self.manager.topics.clone();
+            tokio::spawn(async move {
+                let mut lock = topics.lock();
+                if Arc::strong_count(&strong) == 2 {
+                    lock.remove(&topic_id);
+                }
+            });
         }
     }
 }
