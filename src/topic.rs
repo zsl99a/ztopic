@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId},
+    any::Any,
     collections::HashMap,
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -14,12 +14,18 @@ use tokio::task::JoinSet;
 use crate::{stream::SharedStream, GLOBAL_BATCH_SIZE, GLOBAL_CAPACITY};
 
 #[derive(Debug)]
-pub struct TopicManager<S> {
+pub struct TopicManager<S>
+where
+    S: Send + Sync + 'static,
+{
     store: Arc<S>,
-    topics: Arc<Mutex<HashMap<(TypeId, String), Box<dyn Any + Send + Sync>>>>,
+    topics: Arc<Mutex<HashMap<String, Box<dyn Any + Send + Sync>>>>,
 }
 
-impl<S> Clone for TopicManager<S> {
+impl<S> Clone for TopicManager<S>
+where
+    S: Send + Sync + 'static,
+{
     fn clone(&self) -> Self {
         Self {
             store: self.store.clone(),
@@ -51,6 +57,10 @@ where
     pub fn store(&self) -> &S {
         &self.store
     }
+
+    pub(crate) fn topics(&self) -> Vec<String> {
+        self.topics.lock().iter().map(|(k, _)| k.clone()).collect()
+    }
 }
 
 pub struct TopicToken<T, S>
@@ -60,7 +70,7 @@ where
     T::Error: Send + Sync + Clone + 'static,
     S: Send + Sync + 'static,
 {
-    topic_id: (TypeId, String),
+    topic_id: String,
     stream: SharedStream<BoxStream<'static, Result<T::Output, T::Error>>>,
     manager: TopicManager<S>,
     strong: Arc<()>,
@@ -76,7 +86,7 @@ where
     pub fn new(topic: T, manager: TopicManager<S>) -> Self {
         let topics = manager.topics.lock();
 
-        let topic_id = (TypeId::of::<T>(), topic.topic());
+        let topic_id = format!("{} {{ {} }}", std::any::type_name::<T>(), topic.topic());
 
         let token = if let Some(topic) = topics.get(&topic_id) {
             if let Some(topic) = topic.downcast_ref::<Self>() {

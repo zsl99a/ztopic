@@ -1,10 +1,11 @@
 mod buffer;
 mod empty;
+mod routes;
 mod stream;
 mod time;
 mod topic;
 
-pub use {empty::*, stream::*, time::*, topic::*};
+pub use {empty::*, routes::*, stream::*, time::*, topic::*};
 
 pub(crate) static mut GLOBAL_CAPACITY: usize = 128;
 pub(crate) static mut GLOBAL_BATCH_SIZE: usize = 16;
