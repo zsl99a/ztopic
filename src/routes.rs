@@ -19,7 +19,7 @@ where
         .layer(CompressionLayer::new())
 }
 
-pub async fn get_topics<S>(State(manager): State<TopicManager<S>>) -> impl IntoResponse
+async fn get_topics<S>(State(manager): State<TopicManager<S>>) -> impl IntoResponse
 where
     S: Send + Sync + 'static,
 {
