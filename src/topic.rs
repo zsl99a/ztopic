@@ -13,13 +13,15 @@ use tokio::task::JoinSet;
 
 use crate::{stream::SharedStream, GLOBAL_BATCH_SIZE, GLOBAL_CAPACITY};
 
+type Topics = HashMap<String, Option<Box<dyn Any + Send + Sync>>>;
+
 #[derive(Debug)]
 pub struct TopicManager<S>
 where
     S: Send + Sync + 'static,
 {
     store: Arc<S>,
-    topics: Arc<Mutex<HashMap<String, Box<dyn Any + Send + Sync>>>>,
+    topics: Arc<Mutex<Topics>>,
 }
 
 impl<S> Clone for TopicManager<S>
@@ -84,32 +86,41 @@ where
     S: Send + Sync + 'static,
 {
     pub fn new(topic: T, manager: TopicManager<S>) -> Self {
-        let topics = manager.topics.lock();
-
         let topic_id = format!("{} {{ {} }}", std::any::type_name::<T>(), topic.topic());
 
-        let token = if let Some(topic) = topics.get(&topic_id) {
-            if let Some(topic) = topic.downcast_ref::<Self>() {
-                topic.clone()
+        loop {
+            let mut topics = manager.topics.lock();
+
+            if let Some(topic) = topics.get(&topic_id) {
+                if let Some(topic) = topic {
+                    // 如果 topic 已经存在了，就不需要再次创建了
+                    return topic.downcast_ref::<Self>().unwrap().clone();
+                } else {
+                    // 如果 topic 正在创建中，就等待正在创建的线程创建完成
+                    drop(topics);
+                    std::thread::yield_now();
+                }
             } else {
-                panic!("topic type mismatch")
+                // 如果 topic 还未存在，就创建一个新的
+
+                topics.insert(topic_id.clone(), None);
+
+                // topic.init 函数内部会获取 manager.topics.lock()，所以这里需要drop掉topic
+                // 注意，这里需要先 insert None，再 drop topics，否则会导致重复创建相同的Topic
+                drop(topics);
+
+                let token = Self {
+                    topic_id: topic_id.clone(),
+                    stream: SharedStream::new(topic.init(&manager), topic.capacity(), topic.batch_size()),
+                    manager: manager.clone(),
+                    strong: Arc::new(()),
+                };
+
+                manager.topics.lock().insert(topic_id.clone(), Some(Box::new(token.clone())));
+
+                return token;
             }
-        } else {
-            drop(topics);
-
-            let token = Self {
-                topic_id: topic_id.clone(),
-                stream: SharedStream::new(topic.init(&manager), topic.capacity(), topic.batch_size()),
-                manager: manager.clone(),
-                strong: Arc::new(()),
-            };
-
-            manager.topics.lock().insert(topic_id, Box::new(token.clone()));
-
-            token
-        };
-
-        token
+        }
     }
 
     pub fn spawn(mut self) -> JoinSet<()> {
