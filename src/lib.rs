@@ -1,9 +1,10 @@
-pub mod global;
-pub mod manager;
 pub mod operators;
 pub mod references;
-pub mod registry;
 pub mod storages;
-pub mod stream;
-pub mod token;
-pub mod topic;
+
+mod manager;
+mod stream;
+mod token;
+mod topic;
+
+pub use {manager::*, stream::*, token::*, topic::*};

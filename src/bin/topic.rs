@@ -4,11 +4,10 @@ use anyhow::Error;
 use futures::{Stream, StreamExt, TryStreamExt};
 use jemallocator::Jemalloc;
 use ztopic::{
-    manager::TopicManager,
-    operators::interval::Interval,
+    operators::Interval,
     references::RawRef,
-    storages::{broadcast::Broadcast, Storage},
-    topic::Topic,
+    storages::{Broadcast, Storage},
+    Topic, TopicManager,
 };
 
 #[global_allocator]

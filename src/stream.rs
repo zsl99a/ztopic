@@ -14,7 +14,7 @@ use pin_project::pin_project;
 
 use crate::{
     manager::TopicManager,
-    storages::{sync_cell::SyncCell, Storage},
+    storages::{Storage, SyncCell},
     topic::Topic,
 };
 
@@ -129,7 +129,7 @@ where
     }
 }
 
-pub struct Inner<T, S, K>
+pub(crate) struct Inner<T, S, K>
 where
     T: Topic<S, K>,
     S: Send + 'static,

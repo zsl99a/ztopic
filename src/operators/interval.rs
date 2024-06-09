@@ -10,7 +10,7 @@ use futures::Stream;
 use crate::{
     manager::TopicManager,
     references::RawRef,
-    storages::{broadcast::Broadcast, Storage},
+    storages::{Broadcast, Storage},
     topic::Topic,
 };
 

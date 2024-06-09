@@ -2,7 +2,7 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
 use futures::Stream;
 
-use crate::{global::GLOBAL_CAPACITY, manager::TopicManager, references::RawRef, storages::broadcast::Broadcast, topic::Topic};
+use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic};
 
 pub struct Empty<I, O, E>
 where
@@ -44,7 +44,7 @@ where
     }
 
     fn storage(&self) -> Self::Storage {
-        Broadcast::new(unsafe { GLOBAL_CAPACITY })
+        Broadcast::new(1024)
     }
 
     fn mount(&mut self, _manager: TopicManager<S>, _storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {

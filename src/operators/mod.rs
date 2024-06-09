@@ -1,2 +1,4 @@
-pub mod empty;
-pub mod interval;
+mod empty;
+mod interval;
+
+pub use {empty::*, interval::*};

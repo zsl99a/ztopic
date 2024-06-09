@@ -1,7 +1,9 @@
-pub mod broadcast;
-pub mod disperse;
-pub mod mem_cache;
-pub mod sync_cell;
+mod broadcast;
+mod disperse;
+mod mem_cache;
+mod sync_cell;
+
+pub use {broadcast::*, disperse::*, mem_cache::*, sync_cell::*};
 
 #[allow(unused_variables)]
 pub trait Storage<K, V>: Clone + Send {
