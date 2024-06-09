@@ -1,115 +1,158 @@
 use std::{
+    collections::HashMap,
     pin::Pin,
-    sync::atomic::{AtomicPtr, Ordering},
-    task::{Context, Poll},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    task::{Context, Poll, Waker},
 };
 
-use futures::Stream;
+use futures::{stream::BoxStream, Stream, StreamExt};
+use parking_lot::Mutex;
+use pin_project::pin_project;
 
-use crate::buffer::SharedBuffer;
+use crate::{
+    manager::TopicManager,
+    storages::{sync_cell::SyncCell, Storage},
+    topic::Topic,
+};
 
-pub struct SharedStream<S>
+#[pin_project]
+pub struct MultipleStream<T, S, K>
 where
-    S: Stream + Unpin,
-    S::Item: Clone,
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
 {
-    buffer: AtomicPtr<SharedBuffer<S>>,
+    inner: Arc<SyncCell<Inner<T, S, K>>>,
+    storage: T::Storage,
     cursor: usize,
     stream_id: usize,
 }
 
-impl<S> SharedStream<S>
+impl<T, S, K> Clone for MultipleStream<T, S, K>
 where
-    S: Stream + Unpin,
-    S::Item: Clone,
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
 {
-    pub fn new(stream: S, capacity: usize, batch_size: usize) -> Self {
+    fn clone(&self) -> Self {
         Self {
-            buffer: AtomicPtr::new(Box::into_raw(Box::new(SharedBuffer::new(stream, capacity, batch_size)))),
+            inner: self.inner.clone(),
+            storage: self.storage.clone(),
+            cursor: self.storage.get_prev_cursor(),
+            stream_id: self.new_stream_id(),
+        }
+    }
+}
+
+impl<T, S, K> MultipleStream<T, S, K>
+where
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
+{
+    pub fn new(mut topic: T, manager: TopicManager<S>) -> Self {
+        let storage = topic.storage();
+        let stream = topic.mount(manager, storage.clone()).boxed();
+        Self {
+            inner: Arc::new(SyncCell::new(Inner::new(stream))),
+            storage,
             cursor: 0,
             stream_id: 0,
         }
     }
 
-    pub fn insert(&mut self, item: S::Item) {
-        self.buffer_mut().insert(item);
-    }
-}
-
-impl<S> SharedStream<S>
-where
-    S: Stream + Unpin,
-    S::Item: Clone,
-{
-    fn buffer(&self) -> &SharedBuffer<S> {
-        unsafe { &**self.buffer.as_ptr() }
+    pub fn with_key(&mut self, key: K) {
+        self.storage.with_key(key);
     }
 
-    fn buffer_mut(&mut self) -> &mut SharedBuffer<S> {
-        unsafe { &mut **self.buffer.as_ptr() }
+    pub(crate) fn inner(&self) -> &Arc<SyncCell<Inner<T, S, K>>> {
+        &self.inner
     }
-}
 
-impl<S> Clone for SharedStream<S>
-where
-    S: Stream + Unpin,
-    S::Item: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            buffer: AtomicPtr::new(self.buffer.load(Ordering::Relaxed)),
-            cursor: self.buffer().new_stream_cursor(),
-            stream_id: self.buffer().new_stream_id(),
+    fn stream(&self) -> &mut BoxStream<'static, Result<(), T::Error>> {
+        &mut self.inner.get_mut().stream
+    }
+
+    fn new_stream_id(&self) -> usize {
+        self.inner.get().next_stream_id.fetch_add(1, Ordering::Release)
+    }
+
+    fn wake_all(&self) {
+        for (_, waker) in self.inner.get().wakers.lock().drain() {
+            waker.wake();
         }
     }
 }
 
-impl<S> Drop for SharedStream<S>
+impl<T, S, K> Stream for MultipleStream<T, S, K>
 where
-    S: Stream + Unpin,
-    S::Item: Clone,
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
 {
-    fn drop(&mut self) {
-        let stream_id = self.stream_id;
-        self.buffer_mut().drop_stream(stream_id);
-    }
-}
-
-impl<S> Stream for SharedStream<S>
-where
-    S: Stream + Unpin,
-    S::Item: Clone,
-{
-    type Item = S::Item;
+    type Item = Result<T::References, T::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let cursor = self.cursor;
-        let stream_id = self.stream_id;
-
-        let poll = self.buffer_mut().poll_receive(cx, cursor, stream_id);
-
-        if poll.is_ready() {
-            self.cursor += 1;
-            if self.cursor >= self.buffer().capacity() {
-                self.cursor = 0;
+        loop {
+            if let Some((item, cursor)) = self.storage.get_item(self.cursor).map(|(item, cursor)| (T::References::from(item), cursor)) {
+                self.cursor = cursor;
+                return Poll::Ready(Some(Ok(item)));
             }
-        }
 
-        poll
+            if let Some(_lock) = self.inner.get().streaming.try_lock() {
+                let mut index = 0;
+                loop {
+                    match self.stream().poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(_))) => index += 1,
+                        Poll::Ready(Some(Err(error))) => return Poll::Ready(Some(Err(error))),
+                        Poll::Ready(None) => return Poll::Ready(None),
+                        Poll::Pending => break,
+                    }
+                }
+                if index > 0 {
+                    self.wake_all();
+                    continue;
+                }
+            } else {
+                self.inner.get().wakers.lock().insert(self.stream_id, cx.waker().clone());
+            }
+
+            return Poll::Pending;
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let buffer = self.buffer();
+        (self.storage.size_hint(self.cursor), None)
+    }
+}
 
-        if buffer.cursor() == self.cursor {
-            (0, None)
-        } else {
-            let len = if buffer.cursor() > self.cursor {
-                buffer.cursor() - self.cursor
-            } else {
-                buffer.capacity() - self.cursor + buffer.cursor()
-            };
-            (len, None)
+pub struct Inner<T, S, K>
+where
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
+{
+    stream: BoxStream<'static, Result<(), T::Error>>,
+    next_stream_id: AtomicUsize,
+    streaming: Mutex<()>,
+    wakers: Mutex<HashMap<usize, Waker>>,
+}
+
+impl<T, S, K> Inner<T, S, K>
+where
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
+{
+    fn new(stream: BoxStream<'static, Result<(), T::Error>>) -> Self {
+        Self {
+            stream,
+            next_stream_id: AtomicUsize::new(1),
+            streaming: Mutex::new(()),
+            wakers: Mutex::new(HashMap::new()),
         }
     }
 }

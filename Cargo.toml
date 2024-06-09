@@ -1,21 +1,21 @@
 [package]
-name = "helium"
-version = "0.1.0"
+name = "ztopic"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-parking_lot = "0"
-
-pin-project-lite = "0.2"
-futures = "0"
-tokio = { version = "1", features = ["full"] }
-async-stream = "0"
-rand = "0"
-
 anyhow = "1"
 dotenvy = "0"
 
-axum = { version = "0", features = ["ws", "macros"] }
-axum-extra = { version = "0", features = ["typed-header"] }
+pin-project = "1"
+parking_lot = "0"
+jemallocator = "0"
+
+futures = "0"
+tokio = { version = "1", features = ["full"] }
+async-stream = "0"
+
+rand = "0"
+dashmap = "5"

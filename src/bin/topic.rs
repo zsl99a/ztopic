@@ -1,66 +1,121 @@
-use futures::{channel::mpsc, stream::BoxStream, SinkExt, StreamExt};
-use helium::{Topic, TopicManager};
+use std::time::Duration;
+
+use anyhow::Error;
+use futures::{Stream, StreamExt, TryStreamExt};
+use jemallocator::Jemalloc;
+use ztopic::{
+    manager::TopicManager,
+    references::RawRef,
+    storages::{broadcast::Broadcast, Storage},
+    topic::Topic,
+};
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    let manager = TopicManager::new(());
+    let manager = TopicManager::new(37);
 
-    let mut topic = manager.topic(MyTopic::new("my".into()));
+    let mut my = manager.topic(MyTopic2::new("demo", 3));
 
-    while let Some(Ok(i)) = topic.next().await {
-        println!("i = {}", i);
+    tokio::spawn(async move {
+        let mut idx = 0;
 
-        if i == 300 {
-            break;
+        while let Some(msg) = my.next().await {
+            match msg {
+                Ok(msg) => {
+                    println!("{:?}", msg)
+                }
+                Err(error) => {
+                    eprintln!("{:?}", error)
+                }
+            }
+
+            idx += 1;
+            if idx >= 3 {
+                break;
+            }
+        }
+    });
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+}
+
+pub struct MyTopic;
+
+impl Default for MyTopic {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl Topic<usize, ()> for MyTopic {
+    type Output = String;
+
+    type Error = Error;
+
+    type References = RawRef<String>;
+
+    type Storage = Broadcast<(), Self::Output>;
+
+    fn storage(&self) -> Self::Storage {
+        Broadcast::new(4096)
+    }
+
+    fn mount(&mut self, _manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
+        async_stream::stream! {
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                storage.insert_with_default(String::from("hello world"));
+                yield Ok(());
+            }
+        }
+        .boxed()
+    }
+}
+
+#[derive(Default)]
+pub struct MyTopic2 {
+    args: (String, u8),
+}
+
+impl MyTopic2 {
+    pub fn new(naem: &str, uid: u8) -> Self {
+        Self {
+            args: (String::from(naem), uid),
         }
     }
-
-    println!("{:?}", manager);
-
-    drop(topic);
-
-    println!("{:?}", manager);
-
-    println!("Done");
 }
 
-pub struct MyTopic {
-    name: String,
-}
+impl Topic<usize, ()> for MyTopic2 {
+    type Output = String;
 
-impl MyTopic {
-    pub fn new(name: String) -> Self {
-        Self { name }
-    }
-}
+    type Error = Error;
 
-impl<S> Topic<S> for MyTopic
-where
-    S: Send + Sync + 'static,
-{
-    type Output = usize;
+    type References = RawRef<String>;
 
-    type Error = ();
+    type Storage = Broadcast<(), Self::Output>;
 
-    fn topic(&self) -> String {
-        self.name.clone()
+    fn topic_id(&self) -> impl std::fmt::Debug + std::hash::Hash {
+        self.args.clone()
     }
 
-    fn init(&self, _manager: &TopicManager<S>) -> BoxStream<'static, Result<Self::Output, Self::Error>> {
-        let (mut tx, rx) = mpsc::channel(32);
+    fn storage(&self) -> Self::Storage {
+        Broadcast::new(4096)
+    }
 
-        tokio::spawn(async move {
-            for i in 0..300 {
-                tx.send(i).await.unwrap();
-                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-            }
-        });
-
-        rx.scan(0, |f, _i| {
-            *f += 1;
-            futures::future::ready(Some(*f))
-        })
-        .map(Ok)
-        .boxed()
+    fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
+        manager
+            .topic(MyTopic)
+            .into_stream()
+            .map(move |event| match event {
+                Ok(event) => {
+                    storage.insert_with_default(format!("{}, {}", *event, rand::random::<u8>()));
+                    Ok(())
+                }
+                Err(error) => Err(error),
+            })
+            .boxed()
     }
 }
