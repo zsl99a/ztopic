@@ -1,5 +1,6 @@
 pub mod global;
 pub mod manager;
+pub mod operators;
 pub mod references;
 pub mod registry;
 pub mod storages;

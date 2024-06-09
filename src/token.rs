@@ -50,7 +50,6 @@ where
         tokio::spawn(async move {
             let mut lock = manager.topics().lock();
             if Arc::strong_count(&inner) == 2 {
-                println!("topic {} is dropped, remove it from manager", topic_id);
                 lock.remove(&topic_id);
             }
         });

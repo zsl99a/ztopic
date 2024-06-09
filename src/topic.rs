@@ -4,7 +4,7 @@ use futures::Stream;
 
 use crate::{manager::TopicManager, storages::Storage};
 
-pub trait Topic<State, K>
+pub trait Topic<S, K>
 where
     Self: Send + 'static,
     Self::Output: Send + 'static,
@@ -25,5 +25,5 @@ where
     fn storage(&self) -> Self::Storage;
 
     #[allow(unused_variables)]
-    fn mount(&mut self, manager: TopicManager<State>, storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static;
+    fn mount(&mut self, manager: TopicManager<S>, storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static;
 }

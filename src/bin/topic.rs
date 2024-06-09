@@ -5,6 +5,7 @@ use futures::{Stream, StreamExt, TryStreamExt};
 use jemallocator::Jemalloc;
 use ztopic::{
     manager::TopicManager,
+    operators::interval::Interval,
     references::RawRef,
     storages::{broadcast::Broadcast, Storage},
     topic::Topic,
@@ -63,15 +64,11 @@ impl Topic<usize, ()> for MyTopic {
         Broadcast::new(4096)
     }
 
-    fn mount(&mut self, _manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
-        async_stream::stream! {
-            loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                storage.insert_with_default(String::from("hello world"));
-                yield Ok(());
-            }
-        }
-        .boxed()
+    fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
+        manager.topic(Interval::new(Duration::from_secs(1))).into_stream().map(move |_| {
+            storage.insert_with_default(String::from("hello world"));
+            Ok(())
+        })
     }
 }
 
@@ -106,16 +103,12 @@ impl Topic<usize, ()> for MyTopic2 {
     }
 
     fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
-        manager
-            .topic(MyTopic)
-            .into_stream()
-            .map(move |event| match event {
-                Ok(event) => {
-                    storage.insert_with_default(format!("{}, {}", *event, rand::random::<u8>()));
-                    Ok(())
-                }
-                Err(error) => Err(error),
-            })
-            .boxed()
+        manager.topic(MyTopic).into_stream().map(move |event| match event {
+            Ok(event) => {
+                storage.insert_with_default(format!("{}, {}", *event, rand::random::<u8>()));
+                Ok(())
+            }
+            Err(error) => Err(error),
+        })
     }
 }
