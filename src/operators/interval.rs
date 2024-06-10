@@ -41,7 +41,7 @@ impl<S> Topic<S, ()> for Interval {
         Broadcast::new(128)
     }
 
-    fn mount(&mut self, _: TopicManager<S>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+    fn mount(&self, _: TopicManager<S>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         let duration = self.duration;
         async_stream::stream! {
             let mut ins = Instant::now();

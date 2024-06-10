@@ -97,7 +97,7 @@ where
     S: Send + Sync + 'static,
     K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
-    pub(crate) fn new(mut topic: T, manager: TopicManager<S>) -> Self {
+    pub(crate) fn new(topic: T, manager: TopicManager<S>) -> Self {
         let topic_id = format!("{}·{:?}", std::any::type_name::<T>(), topic.topic_id());
 
         loop {

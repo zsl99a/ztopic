@@ -52,7 +52,7 @@ where
         Broadcast::new(1024)
     }
 
-    fn mount(&mut self, _: TopicManager<S>, _: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+    fn mount(&self, _: TopicManager<S>, _: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         futures::stream::empty().boxed()
     }
 }

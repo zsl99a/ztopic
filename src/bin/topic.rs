@@ -70,7 +70,7 @@ impl Topic<usize, ()> for MyTopic {
         Broadcast::new(4096)
     }
 
-    fn mount(&mut self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+    fn mount(&self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         manager
             .topic(Interval::new(Duration::from_millis(1000)))
             .into_stream()
@@ -112,11 +112,7 @@ impl Topic<usize, usize> for MyTopic2 {
         Broadcast::new(4096)
     }
 
-    fn mount(
-        &mut self,
-        manager: TopicManager<usize>,
-        storage: StorageManager<usize, Self::Output, Self::Storage>,
-    ) -> BoxStream<'static, Result<(), Self::Error>> {
+    fn mount(&self, manager: TopicManager<usize>, storage: StorageManager<usize, Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         manager
             .topic(MyTopic)
             .into_stream()

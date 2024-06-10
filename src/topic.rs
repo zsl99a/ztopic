@@ -29,5 +29,5 @@ where
     fn storage(&self) -> Self::Storage;
 
     #[allow(unused_variables)]
-    fn mount(&mut self, manager: TopicManager<S>, storage: StorageManager<K, Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>>;
+    fn mount(&self, manager: TopicManager<S>, storage: StorageManager<K, Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>>;
 }
