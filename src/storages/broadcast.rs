@@ -1,45 +1,37 @@
-use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::fmt::Debug;
 
-use super::{sync_cell::SyncCell, Storage};
-
-#[derive(Debug)]
-pub struct Broadcast<K, V> {
-    inner: Arc<SyncCell<Inner<V>>>,
-    _marker: PhantomData<K>,
-}
+use super::Storage;
 
 #[derive(Debug)]
-struct Inner<V> {
+pub struct Broadcast<V> {
     buffer: Vec<Option<V>>,
     capacity: usize,
     cursor: usize,
 }
 
-impl<K, V> Clone for Broadcast<K, V> {
+impl<V> Clone for Broadcast<V> {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
-            _marker: self._marker,
+            buffer: (0..self.capacity).map(|_| None).collect(),
+            capacity: self.capacity,
+            cursor: self.cursor,
         }
     }
 }
 
-impl<K, V> Broadcast<K, V> {
+impl<V> Broadcast<V> {
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0);
         Self {
-            inner: Arc::new(SyncCell::new(Inner {
-                buffer: (0..capacity).map(|_| None).collect(),
-                capacity,
-                cursor: 0,
-            })),
-            _marker: PhantomData,
+            buffer: (0..capacity).map(|_| None).collect(),
+            capacity,
+            cursor: 0,
         }
     }
 
     fn next_cursor(&self, cursor: usize) -> usize {
         let cursor = cursor + 1;
-        if cursor < self.inner.get().capacity {
+        if cursor < self.capacity {
             cursor
         } else {
             0
@@ -47,37 +39,34 @@ impl<K, V> Broadcast<K, V> {
     }
 }
 
-impl<K, V> Storage<K, V> for Broadcast<K, V>
-where
-    K: Debug + Clone + Hash + Eq + Default + Send,
-{
+impl<V> Storage<V> for Broadcast<V> {
     fn insert(&mut self, value: V) {
-        let cursor = self.inner.get().cursor;
-        self.inner.get_mut().buffer[cursor] = Some(value);
-        self.inner.get_mut().cursor = self.next_cursor(cursor);
+        let cursor = self.cursor;
+        self.buffer[cursor] = Some(value);
+        self.cursor = self.next_cursor(cursor);
     }
 
     fn get_item(&self, cursor: usize) -> Option<(&V, usize)> {
-        if cursor == self.inner.get().cursor {
+        if cursor == self.cursor {
             return None;
         }
-        self.inner.get().buffer[cursor].as_ref().map(|v| (v, self.next_cursor(cursor)))
+        self.buffer[cursor].as_ref().map(|v| (v, self.next_cursor(cursor)))
     }
 
     fn get_prev_cursor(&self) -> usize {
-        let cursor = self.inner.get().cursor;
-        let prev_cursor = if cursor == 0 { self.inner.get().capacity - 1 } else { cursor - 1 };
-        match self.inner.get().buffer.get(prev_cursor) {
+        let cursor = self.cursor;
+        let prev_cursor = if cursor == 0 { self.capacity - 1 } else { cursor - 1 };
+        match self.buffer.get(prev_cursor) {
             Some(_) => prev_cursor,
             None => cursor,
         }
     }
 
     fn size_hint(&self, cursor: usize) -> usize {
-        if cursor < self.inner.get().cursor {
-            self.inner.get().cursor - cursor
+        if cursor < self.cursor {
+            self.cursor - cursor
         } else {
-            self.inner.get().capacity - cursor + self.inner.get().cursor
+            self.capacity - cursor + self.cursor
         }
     }
 }

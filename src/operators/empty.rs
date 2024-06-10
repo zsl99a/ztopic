@@ -1,8 +1,13 @@
 use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
-use futures::Stream;
+use futures::{stream::BoxStream, StreamExt};
 
-use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic};
+use crate::{
+    manager::TopicManager,
+    references::RawRef,
+    storages::{Broadcast, StorageManager},
+    topic::Topic,
+};
 
 pub struct Empty<I, O, E>
 where
@@ -37,7 +42,7 @@ where
 
     type References = RawRef<Self::Output>;
 
-    type Storage = Broadcast<(), Self::Output>;
+    type Storage = Broadcast<Self::Output>;
 
     fn topic_id(&self) -> impl Debug + Hash {
         self.topic_id.clone()
@@ -47,7 +52,7 @@ where
         Broadcast::new(1024)
     }
 
-    fn mount(&mut self, _manager: TopicManager<S>, _storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
-        futures::stream::empty()
+    fn mount(&mut self, _: TopicManager<S>, _: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+        futures::stream::empty().boxed()
     }
 }

@@ -1,53 +1,35 @@
-use std::{fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
+use std::fmt::Debug;
 
-use super::{sync_cell::SyncCell, Storage};
+use super::Storage;
 
-#[derive(Debug)]
-pub struct MemCache<K, V>
+#[derive(Debug, Clone)]
+pub struct MemCache<V>
 where
-    K: Debug + Clone + Hash + Eq,
+    V: Clone,
 {
-    cache: Arc<SyncCell<V>>,
+    cache: V,
     cursor: usize,
-    _marker: PhantomData<K>,
 }
 
-impl<K, V> Clone for MemCache<K, V>
+impl<V> MemCache<V>
 where
-    K: Debug + Clone + Hash + Eq,
-{
-    fn clone(&self) -> Self {
-        Self {
-            cache: self.cache.clone(),
-            cursor: self.cursor,
-            _marker: self._marker,
-        }
-    }
-}
-
-impl<K, V> MemCache<K, V>
-where
-    K: Debug + Clone + Hash + Eq,
+    V: Clone,
 {
     pub fn new(cache: V) -> Self {
-        Self {
-            cache: Arc::new(SyncCell::new(cache)),
-            cursor: 0,
-            _marker: PhantomData,
-        }
+        Self { cache, cursor: 0 }
     }
 }
 
-impl<K, V> Storage<K, V> for MemCache<K, V>
+impl<V> Storage<V> for MemCache<V>
 where
-    K: Debug + Clone + Hash + Eq + Send,
+    V: Clone,
 {
     fn refresh(&mut self) {
         self.cursor += 1;
     }
 
     fn get_item(&self, _cursor: usize) -> Option<(&V, usize)> {
-        Some(((self.cache.get()), self.cursor))
+        Some((&self.cache, self.cursor))
     }
 
     fn size_hint(&self, _cursor: usize) -> usize {

@@ -1,8 +1,8 @@
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{any::Any, collections::HashMap, hash::Hash, sync::Arc};
 
 use parking_lot::Mutex;
 
-use crate::{token::TopicToken, topic::Topic};
+use crate::{storages::Storage, token::TopicToken, topic::Topic};
 
 type AnyTopic = Box<dyn Any + Send + Sync>;
 
@@ -36,9 +36,9 @@ impl<S> TopicManager<S> {
     pub fn topic<T, K>(&self, topic: T) -> TopicToken<T, S, K>
     where
         T: Topic<S, K>,
-        T::Storage: Sync + Unpin,
+        T::Storage: Storage<T::Output>,
         S: Send + Sync + 'static,
-        K: Default + 'static,
+        K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
     {
         TopicToken::<T, S, K>::new(topic, self.clone())
     }

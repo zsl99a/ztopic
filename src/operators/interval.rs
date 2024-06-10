@@ -5,12 +5,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::Stream;
+use futures::stream::{BoxStream, StreamExt};
 
 use crate::{
     manager::TopicManager,
     references::RawRef,
-    storages::{Broadcast, Storage},
+    storages::{Broadcast, StorageManager},
     topic::Topic,
 };
 
@@ -31,7 +31,7 @@ impl<S> Topic<S, ()> for Interval {
 
     type References = RawRef<Self::Output>;
 
-    type Storage = Broadcast<(), Self::Output>;
+    type Storage = Broadcast<Self::Output>;
 
     fn topic_id(&self) -> impl Debug + Hash {
         self.duration
@@ -41,7 +41,7 @@ impl<S> Topic<S, ()> for Interval {
         Broadcast::new(128)
     }
 
-    fn mount(&mut self, _manager: TopicManager<S>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
+    fn mount(&mut self, _: TopicManager<S>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         let duration = self.duration;
         async_stream::stream! {
             let mut ins = Instant::now();
@@ -52,5 +52,6 @@ impl<S> Topic<S, ()> for Interval {
                 tokio::time::sleep(duration).await;
             }
         }
+        .boxed()
     }
 }

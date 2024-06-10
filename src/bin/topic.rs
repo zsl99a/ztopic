@@ -1,12 +1,12 @@
 use std::time::Duration;
 
 use anyhow::Error;
-use futures::{Stream, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use jemallocator::Jemalloc;
 use ztopic::{
     operators::Interval,
     references::RawRef,
-    storages::{Broadcast, Storage},
+    storages::{Broadcast, StorageManager},
     Topic, TopicManager,
 };
 
@@ -24,12 +24,8 @@ async fn main() {
 
         while let Some(msg) = my.next().await {
             match msg {
-                Ok(msg) => {
-                    println!("{:?}", msg)
-                }
-                Err(error) => {
-                    eprintln!("{:?}", error)
-                }
+                Ok(msg) => println!("{:?}", msg),
+                Err(error) => eprintln!("{:?}", error),
             }
 
             idx += 1;
@@ -57,17 +53,21 @@ impl Topic<usize, ()> for MyTopic {
 
     type References = RawRef<String>;
 
-    type Storage = Broadcast<(), Self::Output>;
+    type Storage = Broadcast<Self::Output>;
 
     fn storage(&self) -> Self::Storage {
         Broadcast::new(4096)
     }
 
-    fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
-        manager.topic(Interval::new(Duration::from_secs(1))).into_stream().map(move |_| {
-            storage.insert(String::from("hello world"));
-            Ok(())
-        })
+    fn mount(&mut self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+        manager
+            .topic(Interval::new(Duration::from_secs(1)))
+            .into_stream()
+            .map(move |_| {
+                storage.insert(String::from("hello world"));
+                Ok(())
+            })
+            .boxed()
     }
 }
 
@@ -91,7 +91,7 @@ impl Topic<usize, ()> for MyTopic2 {
 
     type References = RawRef<String>;
 
-    type Storage = Broadcast<(), Self::Output>;
+    type Storage = Broadcast<Self::Output>;
 
     fn topic_id(&self) -> impl std::fmt::Debug + std::hash::Hash {
         self.args.clone()
@@ -101,13 +101,17 @@ impl Topic<usize, ()> for MyTopic2 {
         Broadcast::new(4096)
     }
 
-    fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
-        manager.topic(MyTopic).into_stream().map(move |event| match event {
-            Ok(event) => {
-                storage.insert(format!("{}, {}", *event, rand::random::<u8>()));
-                Ok(())
-            }
-            Err(error) => Err(error),
-        })
+    fn mount(&mut self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+        manager
+            .topic(MyTopic)
+            .into_stream()
+            .map(move |event| match event {
+                Ok(event) => {
+                    storage.insert(format!("{}, {}", *event, rand::random::<u8>()));
+                    Ok(())
+                }
+                Err(error) => Err(error),
+            })
+            .boxed()
     }
 }

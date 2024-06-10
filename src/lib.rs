@@ -1,9 +1,10 @@
+pub mod common;
 pub mod operators;
 pub mod references;
+pub mod registry;
 pub mod storages;
 
 mod manager;
-mod stream;
 mod token;
 mod topic;
 

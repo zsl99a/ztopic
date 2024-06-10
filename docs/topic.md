@@ -5,19 +5,18 @@ flowchart LR
         Manager --> Store
         Manager -->|new or clone\nby topic id| TopicToken
         TopicToken -..->|drop| Manager
-        TopicToken --> MultipleStream
-        MultipleStream --> BoxedStream
-        MultipleStream --> StorageByKey
-        MultipleStream -->|register| StreamID
+        TopicToken --> BoxedStream
+        TopicToken --> StorageManager
+        TopicToken -->|register| StreamID
         StreamID -.->|Refs| Event
-        BoxedStream --> StorageByKey
+        BoxedStream --> StorageManager
         BoxedStream -->|stream next| Topic
-        StorageByKey --> Storage
-        StorageByKey --> WakerRegister
-        WakerRegister -.->|wake all| StreamID
+        StorageManager --> Storage
+        StorageManager --> WakerRegistry
+        WakerRegistry -.->|wake all| StreamID
         Storage --> Event
         Topic -.->|create sub topic| Manager
-        Topic -.->|insert by key| StorageByKey
+        Topic -.->|insert by key| StorageManager
 
     end
 ```

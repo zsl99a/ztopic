@@ -1,16 +1,20 @@
 use std::{fmt::Debug, hash::Hash, ops::Deref};
 
-use futures::Stream;
+use futures::stream::BoxStream;
 
-use crate::{manager::TopicManager, storages::Storage};
+use crate::{
+    manager::TopicManager,
+    storages::{Storage, StorageManager},
+};
 
 pub trait Topic<S, K>
 where
+    K: Clone + Default + Hash + Eq,
     Self: Send + 'static,
     Self::Output: Send + 'static,
     Self::Error: Send + 'static,
     Self::References: Deref<Target = Self::Output> + for<'a> From<&'a Self::Output> + 'static,
-    Self::Storage: Storage<K, Self::Output> + 'static,
+    Self::Storage: Storage<Self::Output> + 'static,
 {
     type Output;
 
@@ -25,5 +29,5 @@ where
     fn storage(&self) -> Self::Storage;
 
     #[allow(unused_variables)]
-    fn mount(&mut self, manager: TopicManager<S>, storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static;
+    fn mount(&mut self, manager: TopicManager<S>, storage: StorageManager<K, Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>>;
 }
