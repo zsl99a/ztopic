@@ -46,7 +46,7 @@ impl<S> Topic<S, ()> for Interval {
         async_stream::stream! {
             let mut ins = Instant::now();
             loop {
-                storage.insert_with_default(ins);
+                storage.insert(ins);
                 yield Ok(());
                 ins = Instant::now();
                 tokio::time::sleep(duration).await;

@@ -42,12 +42,12 @@ impl<K, V> Storage<K, V> for Disperse<K, V>
 where
     K: Debug + Clone + Hash + Eq + Default + Send,
 {
-    fn insert(&mut self, key: K, value: V) {
+    fn insert_with(&mut self, key: K, value: V) {
         match self.buffers.get_mut().get_mut(&key) {
             Some(buffer) => buffer,
             None => self.buffers.get_mut().entry(key.clone()).or_insert(Broadcast::new(self.capacity)),
         }
-        .insert(key, value)
+        .insert_with(key, value)
     }
 
     fn get_item(&self, cursor: usize) -> Option<(&V, usize)> {

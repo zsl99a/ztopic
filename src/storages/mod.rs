@@ -7,14 +7,14 @@ pub use {broadcast::*, disperse::*, mem_cache::*, sync_cell::*};
 
 #[allow(unused_variables)]
 pub trait Storage<K, V>: Clone + Send {
-    fn insert_with_default(&mut self, value: V)
+    fn insert(&mut self, value: V)
     where
         K: Default,
     {
-        self.insert(K::default(), value)
+        self.insert_with(K::default(), value)
     }
 
-    fn insert(&mut self, key: K, value: V) {}
+    fn insert_with(&mut self, key: K, value: V) {}
 
     fn refresh(&mut self) {}
 

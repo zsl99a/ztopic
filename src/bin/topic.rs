@@ -65,7 +65,7 @@ impl Topic<usize, ()> for MyTopic {
 
     fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
         manager.topic(Interval::new(Duration::from_secs(1))).into_stream().map(move |_| {
-            storage.insert_with_default(String::from("hello world"));
+            storage.insert(String::from("hello world"));
             Ok(())
         })
     }
@@ -104,7 +104,7 @@ impl Topic<usize, ()> for MyTopic2 {
     fn mount(&mut self, manager: TopicManager<usize>, mut storage: Self::Storage) -> impl Stream<Item = Result<(), Self::Error>> + Send + 'static {
         manager.topic(MyTopic).into_stream().map(move |event| match event {
             Ok(event) => {
-                storage.insert_with_default(format!("{}, {}", *event, rand::random::<u8>()));
+                storage.insert(format!("{}, {}", *event, rand::random::<u8>()));
                 Ok(())
             }
             Err(error) => Err(error),

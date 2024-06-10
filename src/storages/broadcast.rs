@@ -51,7 +51,7 @@ impl<K, V> Storage<K, V> for Broadcast<K, V>
 where
     K: Debug + Clone + Hash + Eq + Default + Send,
 {
-    fn insert_with_default(&mut self, value: V) {
+    fn insert(&mut self, value: V) {
         let cursor = self.inner.get().cursor;
         self.inner.get_mut().buffer[cursor] = Some(value);
         self.inner.get_mut().cursor = self.next_cursor(cursor);
