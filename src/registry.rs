@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, task::Waker};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, task::Waker};
 
 use futures::task::AtomicWaker;
 
@@ -12,7 +12,7 @@ where
 
 impl<K> Default for WakerRegistry<K>
 where
-    K: Hash + Eq,
+    K: Hash + Eq + Debug,
 {
     fn default() -> Self {
         Self::new()
@@ -21,7 +21,7 @@ where
 
 impl<K> WakerRegistry<K>
 where
-    K: Hash + Eq,
+    K: Hash + Eq + Debug,
 {
     pub fn new() -> Self {
         Self {

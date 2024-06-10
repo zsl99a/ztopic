@@ -1,4 +1,4 @@
-use std::{cmp::Eq, collections::HashMap, hash::Hash, marker::PhantomData, sync::Arc, task::Waker};
+use std::{cmp::Eq, collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc, task::Waker};
 
 use crate::{common::SyncCell, registry::WakerRegistry};
 
@@ -52,7 +52,7 @@ where
 
 impl<K, V, S> StorageManager<K, V, S>
 where
-    K: Clone + Default + Hash + Eq,
+    K: Clone + Default + Hash + Eq + Debug,
     S: Storage<V>,
 {
     pub fn new(storage: S) -> Self {

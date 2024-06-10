@@ -17,25 +17,36 @@ static GLOBAL: Jemalloc = Jemalloc;
 async fn main() {
     let manager = TopicManager::new(37);
 
-    let mut my = manager.topic(MyTopic2::new("demo", 3));
+    let mut my0 = manager.topic(MyTopic2::new("demo", 3)).with_key(0);
+    let mut my1 = manager.topic(MyTopic2::new("demo", 3)).with_key(1);
+    let mut my2 = manager.topic(MyTopic2::new("demo", 3)).with_key(2);
 
     tokio::spawn(async move {
-        let mut idx = 0;
-
-        while let Some(msg) = my.next().await {
+        while let Some(msg) = my0.next().await {
             match msg {
-                Ok(msg) => println!("{:?}", msg),
+                Ok(msg) => println!("     0: {:?}", msg),
                 Err(error) => eprintln!("{:?}", error),
             }
-
-            idx += 1;
-            if idx >= 3 {
-                break;
+        }
+    });
+    tokio::spawn(async move {
+        while let Some(msg) = my1.next().await {
+            match msg {
+                Ok(msg) => println!("     1: {:?}", msg),
+                Err(error) => eprintln!("{:?}", error),
+            }
+        }
+    });
+    tokio::spawn(async move {
+        while let Some(msg) = my2.next().await {
+            match msg {
+                Ok(msg) => println!("     2: {:?}", msg),
+                Err(error) => eprintln!("{:?}", error),
             }
         }
     });
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(60)).await;
 }
 
 pub struct MyTopic;
@@ -61,7 +72,7 @@ impl Topic<usize, ()> for MyTopic {
 
     fn mount(&mut self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
         manager
-            .topic(Interval::new(Duration::from_secs(1)))
+            .topic(Interval::new(Duration::from_millis(1000)))
             .into_stream()
             .map(move |_| {
                 storage.insert(String::from("hello world"));
@@ -84,7 +95,7 @@ impl MyTopic2 {
     }
 }
 
-impl Topic<usize, ()> for MyTopic2 {
+impl Topic<usize, usize> for MyTopic2 {
     type Output = String;
 
     type Error = Error;
@@ -101,13 +112,19 @@ impl Topic<usize, ()> for MyTopic2 {
         Broadcast::new(4096)
     }
 
-    fn mount(&mut self, manager: TopicManager<usize>, storage: StorageManager<(), Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>> {
+    fn mount(
+        &mut self,
+        manager: TopicManager<usize>,
+        storage: StorageManager<usize, Self::Output, Self::Storage>,
+    ) -> BoxStream<'static, Result<(), Self::Error>> {
         manager
             .topic(MyTopic)
             .into_stream()
             .map(move |event| match event {
                 Ok(event) => {
-                    storage.insert(format!("{}, {}", *event, rand::random::<u8>()));
+                    let key = rand::random::<usize>() % 3;
+                    println!("key: {}, event: {:?}", key, event);
+                    storage.insert_with(key, format!("{}, {}", *event, rand::random::<u8>()));
                     Ok(())
                 }
                 Err(error) => Err(error),

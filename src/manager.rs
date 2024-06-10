@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, hash::Hash, sync::Arc};
+use std::{any::Any, collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 
 use parking_lot::Mutex;
 
@@ -38,7 +38,7 @@ impl<S> TopicManager<S> {
         T: Topic<S, K>,
         T::Storage: Storage<T::Output>,
         S: Send + Sync + 'static,
-        K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+        K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
     {
         TopicToken::<T, S, K>::new(topic, self.clone())
     }

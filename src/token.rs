@@ -1,5 +1,6 @@
 use std::{
     cmp::Eq,
+    fmt::Debug,
     hash::Hash,
     pin::Pin,
     sync::{
@@ -24,7 +25,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     inner: Arc<SyncCell<Inner<T, S, K>>>,
     storage: StorageManager<K, T::Output, T::Storage>,
@@ -37,7 +38,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     stream: BoxStream<'static, Result<(), T::Error>>,
     topic_id: String,
@@ -51,7 +52,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     fn clone(&self) -> Self {
         let this = Self {
@@ -70,7 +71,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     fn drop(&mut self) {
         let stream_id = self.stream_id;
@@ -94,7 +95,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     pub(crate) fn new(mut topic: T, manager: TopicManager<S>) -> Self {
         let topic_id = format!("{}·{:?}", std::any::type_name::<T>(), topic.topic_id());
@@ -129,17 +130,15 @@ where
                     stream_id: 0,
                 };
 
-                token.storage.new_stream(token.stream_id);
-
-                manager.topics().lock().insert(topic_id.clone(), Some(Box::new(token.clone())));
-
-                return token;
+                manager.topics().lock().insert(topic_id.clone(), Some(Box::new(token)));
             }
         }
     }
 
     fn new_stream_id(&self) -> usize {
-        self.inner.next_stream_id.fetch_add(1, Ordering::Release)
+        let s = self.inner.next_stream_id.fetch_add(1, Ordering::Release);
+        println!("- new stream id: {}", s);
+        s
     }
 
     pub fn with_key(mut self, stream_key: K) -> Self {
@@ -155,7 +154,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
 {
     type Item = Result<T::References, T::Error>;
 
@@ -179,9 +178,11 @@ where
                 if self.storage.registry().changed() {
                     self.storage.registry_mut().wake_all();
                     continue;
+                } else {
+                    self.storage.register(self.stream_id, cx.waker());
                 }
             } else {
-                self.storage.register(self.stream_id, cx.waker())
+                self.storage.register(self.stream_id, cx.waker());
             }
 
             return Poll::Pending;
