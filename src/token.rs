@@ -141,6 +141,13 @@ where
     fn new_stream_id(&self) -> usize {
         self.inner.next_stream_id.fetch_add(1, Ordering::Release)
     }
+
+    pub fn with_key(mut self, stream_key: K) -> Self {
+        let lock = self.inner.manager.topics().lock();
+        self.storage.with_key(stream_key, self.stream_id);
+        drop(lock);
+        self
+    }
 }
 
 impl<T, S, K> Stream for TopicToken<T, S, K>
