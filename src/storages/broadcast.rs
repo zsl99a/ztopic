@@ -8,6 +8,13 @@ pub struct Broadcast<K, V> {
     _marker: PhantomData<K>,
 }
 
+#[derive(Debug)]
+struct Inner<V> {
+    buffer: Vec<Option<V>>,
+    capacity: usize,
+    cursor: usize,
+}
+
 impl<K, V> Clone for Broadcast<K, V> {
     fn clone(&self) -> Self {
         Self {
@@ -15,13 +22,6 @@ impl<K, V> Clone for Broadcast<K, V> {
             _marker: self._marker,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct Inner<V> {
-    buffer: Vec<Option<V>>,
-    capacity: usize,
-    cursor: usize,
 }
 
 impl<K, V> Broadcast<K, V> {

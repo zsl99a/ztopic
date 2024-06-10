@@ -7,4 +7,4 @@ mod stream;
 mod token;
 mod topic;
 
-pub use {manager::*, stream::*, token::*, topic::*};
+pub use {manager::*, token::*, topic::*};

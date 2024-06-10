@@ -47,7 +47,7 @@ where
     }
 
     fn get_item(&self, _cursor: usize) -> Option<(&V, usize)> {
-        Some((&self.cache.get(), self.cursor))
+        Some(((self.cache.get()), self.cursor))
     }
 
     fn size_hint(&self, _cursor: usize) -> usize {

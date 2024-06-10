@@ -19,7 +19,7 @@ use crate::{
 };
 
 #[pin_project]
-pub struct MultipleStream<T, S, K>
+pub(crate) struct MultipleStream<T, S, K>
 where
     T: Topic<S, K>,
     S: Send + 'static,
@@ -29,6 +29,18 @@ where
     storage: T::Storage,
     cursor: usize,
     stream_id: usize,
+}
+
+pub(crate) struct Inner<T, S, K>
+where
+    T: Topic<S, K>,
+    S: Send + 'static,
+    K: Default + 'static,
+{
+    stream: BoxStream<'static, Result<(), T::Error>>,
+    next_stream_id: AtomicUsize,
+    streaming: Mutex<()>,
+    wakers: Mutex<HashMap<usize, Waker>>,
 }
 
 impl<T, S, K> Clone for MultipleStream<T, S, K>
@@ -57,18 +69,23 @@ where
         let storage = topic.storage();
         let stream = topic.mount(manager, storage.clone()).boxed();
         Self {
-            inner: Arc::new(SyncCell::new(Inner::new(stream))),
+            inner: Arc::new(SyncCell::new(Inner {
+                stream,
+                next_stream_id: AtomicUsize::new(1),
+                streaming: Mutex::new(()),
+                wakers: Mutex::new(HashMap::new()),
+            })),
             storage,
             cursor: 0,
             stream_id: 0,
         }
     }
 
-    pub fn with_key(&mut self, key: K) {
-        self.storage.with_key(key);
+    pub fn storage(&mut self) -> &mut T::Storage {
+        &mut self.storage
     }
 
-    pub(crate) fn inner(&self) -> &Arc<SyncCell<Inner<T, S, K>>> {
+    pub fn inner(&self) -> &Arc<SyncCell<Inner<T, S, K>>> {
         &self.inner
     }
 
@@ -126,33 +143,5 @@ where
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.storage.size_hint(self.cursor), None)
-    }
-}
-
-pub(crate) struct Inner<T, S, K>
-where
-    T: Topic<S, K>,
-    S: Send + 'static,
-    K: Default + 'static,
-{
-    stream: BoxStream<'static, Result<(), T::Error>>,
-    next_stream_id: AtomicUsize,
-    streaming: Mutex<()>,
-    wakers: Mutex<HashMap<usize, Waker>>,
-}
-
-impl<T, S, K> Inner<T, S, K>
-where
-    T: Topic<S, K>,
-    S: Send + 'static,
-    K: Default + 'static,
-{
-    fn new(stream: BoxStream<'static, Result<(), T::Error>>) -> Self {
-        Self {
-            stream,
-            next_stream_id: AtomicUsize::new(1),
-            streaming: Mutex::new(()),
-            wakers: Mutex::new(HashMap::new()),
-        }
     }
 }

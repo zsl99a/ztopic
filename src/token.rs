@@ -6,7 +6,7 @@ use std::{
 
 use futures::{Stream, StreamExt};
 
-use crate::{manager::TopicManager, stream::MultipleStream, topic::Topic};
+use crate::{manager::TopicManager, storages::Storage, stream::MultipleStream, topic::Topic};
 
 pub struct TopicToken<T, S, K>
 where
@@ -93,10 +93,9 @@ where
         }
     }
 
-    pub fn with_key(self, key: K) -> Self {
-        let mut this = self.clone();
-        this.stream.with_key(key);
-        this
+    pub fn with_key(mut self, key: K) -> Self {
+        self.stream.storage().with_key(key);
+        self
     }
 }
 
