@@ -143,11 +143,11 @@ where
         self
     }
 
-    pub fn insert(self, value: T::Output) {
+    pub fn insert(&self, value: T::Output) {
         self.insert_with(K::default(), value)
     }
 
-    pub fn insert_with(self, key: K, value: T::Output) {
+    pub fn insert_with(&self, key: K, value: T::Output) {
         let _lock = self.inner.streaming.lock();
         self.storage.insert_with(key, value);
         self.storage.registry_mut().wake_all();

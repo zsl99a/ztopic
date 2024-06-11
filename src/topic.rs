@@ -4,6 +4,7 @@ use futures::stream::BoxStream;
 
 use crate::{manager::TopicManager, Storage, StorageManager};
 
+#[allow(unused_variables)]
 pub trait Topic<S, K>
 where
     K: Clone + Default + Hash + Eq,
@@ -25,6 +26,5 @@ where
 
     fn storage(&self) -> Self::Storage;
 
-    #[allow(unused_variables)]
     fn mount(&self, manager: TopicManager<S>, storage: StorageManager<K, Self::Output, Self::Storage>) -> BoxStream<'static, Result<(), Self::Error>>;
 }
