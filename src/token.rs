@@ -131,16 +131,25 @@ where
     }
 
     fn new_stream_id(&self) -> usize {
-        let s = self.inner.next_stream_id.fetch_add(1, Ordering::Release);
-        println!("- new stream id: {}", s);
-        s
+        self.inner.next_stream_id.fetch_add(1, Ordering::Release)
     }
 
     pub fn with_key(mut self, stream_key: K) -> Self {
-        let lock = self.inner.manager.topics().lock();
-        self.storage.with_key(stream_key, self.stream_id);
-        drop(lock);
+        {
+            let _lock = self.inner.streaming.lock();
+            self.storage.with_key(stream_key, self.stream_id);
+        }
         self
+    }
+
+    pub fn insert(self, value: T::Output) {
+        self.insert_with(K::default(), value)
+    }
+
+    pub fn insert_with(self, key: K, value: T::Output) {
+        let _lock = self.inner.streaming.lock();
+        self.storage.insert_with(key, value);
+        self.storage.registry_mut().wake_all();
     }
 }
 
