@@ -7,12 +7,7 @@ use std::{
 
 use futures::stream::{BoxStream, StreamExt};
 
-use crate::{
-    manager::TopicManager,
-    references::RawRef,
-    storages::{Broadcast, StorageManager},
-    topic::Topic,
-};
+use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic, StorageManager};
 
 pub struct Interval {
     duration: Duration,

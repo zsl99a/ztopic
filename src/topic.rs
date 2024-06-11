@@ -2,10 +2,7 @@ use std::{fmt::Debug, hash::Hash, ops::Deref};
 
 use futures::stream::BoxStream;
 
-use crate::{
-    manager::TopicManager,
-    storages::{Storage, StorageManager},
-};
+use crate::{manager::TopicManager, Storage, StorageManager};
 
 pub trait Topic<S, K>
 where

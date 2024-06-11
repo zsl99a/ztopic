@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use super::Storage;
+use crate::Storage;
 
 #[derive(Debug)]
 pub struct Broadcast<V> {

@@ -13,12 +13,7 @@ use std::{
 use futures::{stream::BoxStream, Stream, StreamExt};
 use parking_lot::Mutex;
 
-use crate::{
-    common::SyncCell,
-    manager::TopicManager,
-    storages::{Storage, StorageManager},
-    topic::Topic,
-};
+use crate::{common::SyncCell, manager::TopicManager, topic::Topic, Storage, StorageManager};
 
 pub struct TopicToken<T, S, K>
 where

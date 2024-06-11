@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
-use super::Storage;
+use crate::Storage;
+
 
 #[derive(Debug, Clone)]
 pub struct MemCache<V>

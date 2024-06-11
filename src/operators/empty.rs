@@ -2,12 +2,7 @@ use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
 use futures::{stream::BoxStream, StreamExt};
 
-use crate::{
-    manager::TopicManager,
-    references::RawRef,
-    storages::{Broadcast, StorageManager},
-    topic::Topic,
-};
+use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic, StorageManager};
 
 pub struct Empty<I, O, E>
 where

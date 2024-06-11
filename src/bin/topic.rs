@@ -3,12 +3,7 @@ use std::time::Duration;
 use anyhow::Error;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use jemallocator::Jemalloc;
-use ztopic::{
-    operators::Interval,
-    references::RawRef,
-    storages::{Broadcast, StorageManager},
-    Topic, TopicManager,
-};
+use ztopic::{operators::Interval, references::RawRef, storages::Broadcast, StorageManager, Topic, TopicManager};
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;

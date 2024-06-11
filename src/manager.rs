@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
 
 use parking_lot::Mutex;
 
-use crate::{storages::Storage, token::TopicToken, topic::Topic};
+use crate::{token::TopicToken, topic::Topic, Storage};
 
 type AnyTopic = Box<dyn Any + Send + Sync>;
 
