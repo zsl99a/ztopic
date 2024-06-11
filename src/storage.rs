@@ -75,10 +75,15 @@ where
         self.registry_mut().drop_stream(&self.stream_key, stream_id);
     }
 
-    pub fn with_key(&mut self, stream_key: K, stream_id: usize) {
+    pub fn get_prev_cursor(&self) -> usize {
+        self.inner.storages.get(&self.stream_key).map(|storage| storage.get_prev_cursor()).unwrap_or(0)
+    }
+
+    pub fn with_key(&mut self, stream_key: K, stream_id: usize) -> usize {
         self.stream_key = stream_key;
         self.drop_stream(stream_id);
         self.new_stream(stream_id);
+        self.get_prev_cursor()
     }
 
     pub fn register(&self, stream_id: usize, waker: &Waker) {

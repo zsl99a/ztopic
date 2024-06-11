@@ -53,7 +53,7 @@ where
         let this = Self {
             inner: self.inner.clone(),
             storage: self.storage.clone(),
-            cursor: self.cursor,
+            cursor: self.storage.get_prev_cursor(),
             stream_id: self.new_stream_id(),
         };
         this.storage.new_stream(this.stream_id);
@@ -137,7 +137,8 @@ where
     pub fn with_key(mut self, stream_key: K) -> Self {
         {
             let _lock = self.inner.streaming.lock();
-            self.storage.with_key(stream_key, self.stream_id);
+            let cursor = self.storage.with_key(stream_key, self.stream_id);
+            self.cursor = cursor;
         }
         self
     }
