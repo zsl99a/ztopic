@@ -151,6 +151,10 @@ where
         self.storage.insert_with(key, value);
         self.storage.registry_mut().wake_all();
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.size_hint().0 == 0
+    }
 }
 
 impl<T, S, K> Stream for TopicToken<T, S, K>

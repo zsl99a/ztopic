@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use crate::Storage;
 
-
 #[derive(Debug, Clone)]
 pub struct MemCache<V>
 where
