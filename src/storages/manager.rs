@@ -1,13 +1,20 @@
-use std::{collections::BTreeMap, marker::PhantomData, sync::Arc, task::Waker};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+    marker::PhantomData,
+    sync::Arc,
+    task::Waker,
+};
 
 use futures::{task::AtomicWaker, Future};
+use parking_lot::Mutex;
 use tokio::sync::Notify;
 
 use crate::{common::SyncCell, Storage};
 
 pub struct StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Ord,
+    K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
     stream_key: K,
@@ -16,20 +23,20 @@ where
 
 struct Inner<K, V, S>
 where
-    K: Clone + Default + Eq + Ord,
+    K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
     template: S,
-    storages: BTreeMap<K, S>,
-    registry: BTreeMap<K, BTreeMap<usize, AtomicWaker>>,
-    changed_keys: BTreeMap<K, bool>,
+    storages: HashMap<K, S>,
+    registry: HashMap<K, HashMap<usize, AtomicWaker>>,
+    changed_keys: Mutex<HashSet<K>>,
     notify: Notify,
     _marker: PhantomData<V>,
 }
 
 impl<K, V, S> Clone for StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Ord,
+    K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
     fn clone(&self) -> Self {
@@ -42,7 +49,7 @@ where
 
 impl<K, V, S> StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Ord,
+    K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
     pub fn new(storage: S) -> Self {
@@ -50,9 +57,9 @@ where
             stream_key: K::default(),
             inner: Arc::new(SyncCell::new(Inner {
                 template: storage.clone(),
-                storages: BTreeMap::new(),
-                registry: BTreeMap::new(),
-                changed_keys: BTreeMap::new(),
+                storages: HashMap::new(),
+                registry: HashMap::new(),
+                changed_keys: Mutex::new(HashSet::new()),
                 notify: Notify::new(),
                 _marker: PhantomData,
             })),
@@ -73,8 +80,8 @@ where
     }
 
     pub fn wake_all(&self) {
-        let changed_keys = std::mem::take(&mut self.inner_mut().changed_keys);
-        for (key, _) in changed_keys.into_iter() {
+        let changed_keys = self.inner.changed_keys.lock().drain().collect::<Vec<_>>();
+        for key in changed_keys {
             if let Some(wakers) = self.inner.registry.get(&key) {
                 for (_, w) in wakers.iter() {
                     w.wake();
@@ -90,7 +97,7 @@ where
 
 impl<K, V, S> StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Ord,
+    K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
     pub(crate) fn new_stream(&self, stream_id: usize) {
@@ -103,9 +110,13 @@ where
     }
 
     pub(crate) fn drop_stream(&self, stream_id: usize) {
-        self.inner_mut().registry.get_mut(&self.stream_key).and_then(|wakers| wakers.remove(&stream_id));
-        self.inner_mut().registry.retain(|_, wakers| !wakers.is_empty());
-        self.inner_mut().changed_keys.retain(|k, _| self.inner.registry.contains_key(k));
+        let inner = self.inner_mut();
+        if let Some(wakers) = inner.registry.get_mut(&self.stream_key) {
+            wakers.remove(&stream_id);
+            if wakers.is_empty() {
+                inner.registry.remove(&self.stream_key);
+            }
+        }
         self.inner.notify.notify_waiters();
     }
 
@@ -131,23 +142,23 @@ where
     }
 
     pub(crate) fn set_changed(&self, key: K) {
-        if self.inner.registry.contains_key(&key) && !self.inner.changed_keys.contains_key(&key) {
-            self.inner_mut().changed_keys.insert(key, true);
+        if self.inner.registry.contains_key(&key) && unsafe { !(&*self.inner.changed_keys.data_ptr()).contains(&key) } {
+            self.inner_mut().changed_keys.lock().insert(key);
         }
     }
     pub(crate) fn is_changed(&self) -> bool {
-        !self.inner.changed_keys.is_empty()
+        !self.inner.changed_keys.lock().is_empty()
     }
 
     pub(crate) fn size_hint(&self, cursor: usize) -> usize {
-        self.size_hint_with(K::default(), cursor)
+        self.size_hint_with(&self.stream_key, cursor)
     }
 
-    pub(crate) fn size_hint_with(&self, key: K, cursor: usize) -> usize {
+    pub(crate) fn size_hint_with(&self, key: &K, cursor: usize) -> usize {
         self.inner.storages.get(&key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
     }
 
-    pub(crate) fn registry(&self) -> &BTreeMap<K, BTreeMap<usize, AtomicWaker>> {
+    pub(crate) fn registry(&self) -> &HashMap<K, HashMap<usize, AtomicWaker>> {
         &self.inner.registry
     }
 

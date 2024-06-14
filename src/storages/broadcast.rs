@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{cmp::Ordering, fmt::Debug};
 
 use crate::Storage;
 
@@ -63,10 +63,10 @@ impl<V> Storage<V> for Broadcast<V> {
     }
 
     fn size_hint(&self, cursor: usize) -> usize {
-        if cursor < self.cursor {
-            self.cursor - cursor
-        } else {
-            self.capacity - cursor + self.cursor
+        match self.cursor.cmp(&cursor) {
+            Ordering::Less => self.capacity - cursor + self.cursor,
+            Ordering::Equal => 0,
+            Ordering::Greater => self.cursor - cursor,
         }
     }
 }

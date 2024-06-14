@@ -1,5 +1,6 @@
 use std::{
     cmp::Eq,
+    hash::Hash,
     pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -18,7 +19,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     inner: Arc<SyncCell<Inner<T, S, K>>>,
     storage: StorageManager<K, T::Output, T::Storage>,
@@ -31,7 +32,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     stream: BoxStream<'static, Result<(), T::Error>>,
     topic_id: String,
@@ -45,7 +46,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     fn clone(&self) -> Self {
         let this = Self {
@@ -64,7 +65,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     fn drop(&mut self) {
         let stream_id = self.stream_id;
@@ -87,7 +88,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     pub(crate) fn new(topic: T, manager: TopicManager<S>) -> Self {
         let topic_id = format!("{}·{:?}", std::any::type_name::<T>(), topic.topic_id());
@@ -97,7 +98,7 @@ where
 
             if let Some(topic) = lock.get(&topic_id) {
                 if let Some(topic) = topic {
-                    return topic.downcast_ref::<Self>().unwrap().clone();
+                    return topic.downcast_ref::<Self>().expect("failed to downcast topic").clone();
                 } else {
                     drop(lock);
                     std::thread::yield_now();
@@ -140,11 +141,11 @@ where
         self
     }
 
-    pub fn insert(&self, value: T::Output) {
-        self.insert_with(K::default(), value)
+    pub async fn insert(&self, value: T::Output) {
+        self.insert_with(K::default(), value).await
     }
 
-    pub fn insert_with(&self, key: K, value: T::Output) {
+    pub async fn insert_with(&self, key: K, value: T::Output) {
         let _lock = self.inner.streaming.lock();
         self.storage.insert_with(key, value);
         self.storage.wake_all();
@@ -160,7 +161,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
+    K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
     type Item = Result<T::References, T::Error>;
 
