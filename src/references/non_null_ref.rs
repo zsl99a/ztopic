@@ -1,9 +1,9 @@
-use std::{ops::Deref, ptr::NonNull};
+use std::{fmt::Debug, ops::Deref, ptr::NonNull};
 
 #[derive(Clone)]
 pub struct NonNullRef<T>(NonNull<T>);
 
-impl<T: std::fmt::Debug> std::fmt::Debug for NonNullRef<T> {
+impl<T: Debug> Debug for NonNullRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("NonNullRef").field(&self.0).field(unsafe { &*self.0.as_ptr() }).finish()
     }

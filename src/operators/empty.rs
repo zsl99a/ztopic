@@ -1,12 +1,17 @@
-use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+use std::{fmt::Debug, marker::PhantomData};
 
 use futures::{stream::BoxStream, StreamExt};
 
-use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic, StorageManager};
+use crate::{
+    manager::TopicManager,
+    references::RawRef,
+    storages::{Broadcast, StorageManager},
+    topic::Topic,
+};
 
 pub struct Empty<I, O, E>
 where
-    I: Debug + Hash,
+    I: Debug,
 {
     topic_id: I,
     _marker: PhantomData<(O, E)>,
@@ -14,7 +19,7 @@ where
 
 impl<I, O, E> Empty<I, O, E>
 where
-    I: Debug + Hash,
+    I: Debug,
 {
     pub fn new(topic_id: I) -> Self {
         Self {
@@ -26,7 +31,7 @@ where
 
 impl<I, O, E, S> Topic<S, ()> for Empty<I, O, E>
 where
-    I: Debug + Hash + Clone + Send + 'static,
+    I: Debug + Clone + Send + 'static,
     O: Send + 'static,
     E: Send + 'static,
     S: Send + 'static,
@@ -39,7 +44,7 @@ where
 
     type Storage = Broadcast<Self::Output>;
 
-    fn topic_id(&self) -> impl Debug + Hash {
+    fn topic_id(&self) -> impl Debug {
         self.topic_id.clone()
     }
 

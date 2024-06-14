@@ -4,9 +4,9 @@ pub mod references;
 pub mod storages;
 
 mod manager;
-mod registry;
+mod multiplex;
 mod storage;
 mod token;
 mod topic;
 
-pub use {manager::*, storage::*, token::*, topic::*};
+pub use {manager::*, multiplex::*, storage::*, token::*, topic::*};

@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
+use std::{any::Any, collections::BTreeMap, fmt::Debug, sync::Arc};
 
 use parking_lot::Mutex;
 
@@ -9,7 +9,7 @@ type AnyTopic = Box<dyn Any + Send + Sync>;
 #[derive(Debug)]
 pub struct TopicManager<S> {
     store: Arc<S>,
-    topics: Arc<Mutex<HashMap<String, Option<AnyTopic>>>>,
+    topics: Arc<Mutex<BTreeMap<String, Option<AnyTopic>>>>,
 }
 
 impl<S> Clone for TopicManager<S> {
@@ -25,7 +25,7 @@ impl<S> TopicManager<S> {
     pub fn new(store: S) -> Self {
         Self {
             store: Arc::new(store),
-            topics: Arc::new(Mutex::new(HashMap::new())),
+            topics: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -38,12 +38,12 @@ impl<S> TopicManager<S> {
         T: Topic<S, K>,
         T::Storage: Storage<T::Output>,
         S: Send + Sync + 'static,
-        K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+        K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
     {
         TopicToken::<T, S, K>::new(topic, self.clone())
     }
 
-    pub(crate) fn topics(&self) -> &Mutex<HashMap<String, Option<AnyTopic>>> {
+    pub(crate) fn topics(&self) -> &Mutex<BTreeMap<String, Option<AnyTopic>>> {
         &self.topics
     }
 }

@@ -1,7 +1,5 @@
 use std::{
     cmp::Eq,
-    fmt::Debug,
-    hash::Hash,
     pin::Pin,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -13,14 +11,14 @@ use std::{
 use futures::{stream::BoxStream, Stream, StreamExt};
 use parking_lot::Mutex;
 
-use crate::{common::SyncCell, manager::TopicManager, topic::Topic, Storage, StorageManager};
+use crate::{common::SyncCell, manager::TopicManager, storages::StorageManager, topic::Topic, Storage};
 
 pub struct TopicToken<T, S, K>
 where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     inner: Arc<SyncCell<Inner<T, S, K>>>,
     storage: StorageManager<K, T::Output, T::Storage>,
@@ -33,7 +31,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     stream: BoxStream<'static, Result<(), T::Error>>,
     topic_id: String,
@@ -47,7 +45,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     fn clone(&self) -> Self {
         let this = Self {
@@ -66,7 +64,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     fn drop(&mut self) {
         let stream_id = self.stream_id;
@@ -78,7 +76,6 @@ where
             let mut lock = manager.topics().lock();
             storage.drop_stream(stream_id);
             if Arc::strong_count(&inner) == 2 {
-                println!("drop topic {}", topic_id);
                 lock.remove(&topic_id);
             }
         });
@@ -90,7 +87,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     pub(crate) fn new(topic: T, manager: TopicManager<S>) -> Self {
         let topic_id = format!("{}·{:?}", std::any::type_name::<T>(), topic.topic_id());
@@ -150,7 +147,7 @@ where
     pub fn insert_with(&self, key: K, value: T::Output) {
         let _lock = self.inner.streaming.lock();
         self.storage.insert_with(key, value);
-        self.storage.registry_mut().wake_all();
+        self.storage.wake_all();
     }
 
     pub fn is_empty(&self) -> bool {
@@ -163,7 +160,7 @@ where
     T: Topic<S, K>,
     T::Storage: Storage<T::Output>,
     S: Send + Sync + 'static,
-    K: Default + Clone + Hash + Eq + Send + Sync + Unpin + Debug + 'static,
+    K: Default + Clone + Eq + Ord + Send + Sync + Unpin + 'static,
 {
     type Item = Result<T::References, T::Error>;
 
@@ -184,8 +181,8 @@ where
                     }
                 }
 
-                if self.storage.registry().changed() {
-                    self.storage.registry_mut().wake_all();
+                if self.storage.is_changed() {
+                    self.storage.wake_all();
                     continue;
                 } else {
                     self.storage.register(self.stream_id, cx.waker());

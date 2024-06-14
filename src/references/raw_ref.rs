@@ -1,9 +1,9 @@
-use std::ops::Deref;
+use std::{fmt::Debug, ops::Deref};
 
 #[derive(Clone)]
 pub struct RawRef<T>(*const T);
 
-impl<T: std::fmt::Debug> std::fmt::Debug for RawRef<T> {
+impl<T: Debug> Debug for RawRef<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("RawRef").field(&self.0).field(unsafe { &*self.0 }).finish()
     }

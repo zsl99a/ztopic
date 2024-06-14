@@ -1,9 +1,14 @@
-use std::time::Duration;
+use std::{fmt::Debug, time::Duration};
 
 use anyhow::Error;
 use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use jemallocator::Jemalloc;
-use ztopic::{operators::Interval, references::RawRef, storages::Broadcast, StorageManager, Topic, TopicManager};
+use ztopic::{
+    operators::Interval,
+    references::RawRef,
+    storages::{Broadcast, StorageManager},
+    Topic, TopicManager,
+};
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -99,7 +104,7 @@ impl Topic<usize, usize> for MyTopic2 {
 
     type Storage = Broadcast<Self::Output>;
 
-    fn topic_id(&self) -> impl std::fmt::Debug + std::hash::Hash {
+    fn topic_id(&self) -> impl Debug {
         self.args.clone()
     }
 

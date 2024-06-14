@@ -1,13 +1,17 @@
 use std::{
     convert::Infallible,
     fmt::Debug,
-    hash::Hash,
     time::{Duration, Instant},
 };
 
 use futures::stream::{BoxStream, StreamExt};
 
-use crate::{manager::TopicManager, references::RawRef, storages::Broadcast, topic::Topic, StorageManager};
+use crate::{
+    manager::TopicManager,
+    references::RawRef,
+    storages::{Broadcast, StorageManager},
+    topic::Topic,
+};
 
 pub struct Interval {
     duration: Duration,
@@ -28,7 +32,7 @@ impl<S> Topic<S, ()> for Interval {
 
     type Storage = Broadcast<Self::Output>;
 
-    fn topic_id(&self) -> impl Debug + Hash {
+    fn topic_id(&self) -> impl Debug {
         self.duration
     }
 
