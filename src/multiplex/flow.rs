@@ -50,12 +50,8 @@ where
         .boxed()
     }
 
-    pub fn all_keys(&self) -> impl Iterator<Item = &K> {
-        self.storage.registry().keys()
-    }
-
-    pub fn refresh(&mut self) {
-        let keys = self.all_keys().cloned().collect::<Vec<_>>();
+    fn refresh(&mut self) {
+        let keys = self.storage.registry().keys().cloned().collect::<Vec<_>>();
         let group_size = keys.len() / self.max_load + 1;
         loop {
             match self.join_sets.len().cmp(&group_size) {
