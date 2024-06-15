@@ -179,12 +179,10 @@ where
 
                 if is_changed {
                     continue;
-                } else {
-                    self.storage.register(self.stream_id, cx.waker());
                 }
-            } else {
-                self.storage.register(self.stream_id, cx.waker());
             }
+
+            self.storage.register(self.stream_id, cx.waker());
 
             return Poll::Pending;
         }
