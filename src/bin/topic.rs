@@ -75,7 +75,7 @@ impl Topic<usize, ()> for MyTopic {
             .topic(Interval::new(Duration::from_millis(1000)))
             .into_stream()
             .map(move |_| {
-                storage.insert(String::from("hello world"));
+                storage.scope().insert(String::from("hello world"));
                 Ok(())
             })
             .boxed()
@@ -120,7 +120,7 @@ impl Topic<usize, usize> for MyTopic2 {
                 Ok(event) => {
                     let key = rand::random::<usize>() % 3;
                     println!("key: {}, event: {:?}", key, event);
-                    storage.insert_with(key, format!("{}, {}", *event, rand::random::<u8>()));
+                    storage.scope().insert_with(key, format!("{}, {}", *event, rand::random::<u8>()));
                     Ok(())
                 }
                 Err(error) => Err(error),

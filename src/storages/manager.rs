@@ -2,15 +2,15 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
     marker::PhantomData,
+    ops::Deref,
     sync::Arc,
     task::Waker,
 };
 
 use futures::{task::AtomicWaker, Future};
-use parking_lot::Mutex;
 use tokio::sync::Notify;
 
-use crate::{common::SyncCell, Storage};
+use crate::{common::SyncCell, references::RawRef, Storage};
 
 pub struct StorageManager<K, V, S>
 where
@@ -29,8 +29,7 @@ where
     template: S,
     storages: HashMap<K, S>,
     registry: HashMap<K, HashMap<usize, AtomicWaker>>,
-    changed_keys: Mutex<HashSet<K>>,
-    notify: Notify,
+    registry_changed: Notify,
     _marker: PhantomData<V>,
 }
 
@@ -59,39 +58,18 @@ where
                 template: storage.clone(),
                 storages: HashMap::new(),
                 registry: HashMap::new(),
-                changed_keys: Mutex::new(HashSet::new()),
-                notify: Notify::new(),
+                registry_changed: Notify::new(),
                 _marker: PhantomData,
             })),
         }
     }
 
-    pub fn insert(&self, value: V) {
-        self.insert_with(K::default(), value)
+    pub fn scope(&self) -> Scope<K, V, S> {
+        Scope::new(self)
     }
 
-    pub fn insert_with(&self, key: K, value: V) {
-        match self.inner_mut().storages.get_mut(&key) {
-            Some(buffer) => buffer,
-            None => self.inner_mut().storages.entry(key.clone()).or_insert(self.inner.template.clone()),
-        }
-        .insert(value);
-        self.set_changed(key)
-    }
-
-    pub fn wake_all(&self) {
-        let changed_keys = self.inner.changed_keys.lock().drain().collect::<Vec<_>>();
-        for key in changed_keys {
-            if let Some(wakers) = self.inner.registry.get(&key) {
-                for (_, w) in wakers.iter() {
-                    w.wake();
-                }
-            }
-        }
-    }
-
-    pub fn notified(&self) -> impl Future<Output = ()> + '_ {
-        self.inner.notify.notified()
+    pub fn registry_changed(&self) -> impl Future<Output = ()> + '_ {
+        self.inner.registry_changed.notified()
     }
 }
 
@@ -106,7 +84,7 @@ where
             None => self.inner_mut().registry.entry(self.stream_key.clone()).or_default(),
         }
         .insert(stream_id, AtomicWaker::new());
-        self.inner.notify.notify_waiters();
+        self.inner.registry_changed.notify_waiters();
     }
 
     pub(crate) fn drop_stream(&self, stream_id: usize) {
@@ -117,7 +95,7 @@ where
                 inner.registry.remove(&self.stream_key);
             }
         }
-        self.inner.notify.notify_waiters();
+        self.inner.registry_changed.notify_waiters();
     }
 
     pub(crate) fn get_prev_cursor(&self) -> usize {
@@ -141,15 +119,6 @@ where
         }
     }
 
-    pub(crate) fn set_changed(&self, key: K) {
-        if self.inner.registry.contains_key(&key) && unsafe { !(&*self.inner.changed_keys.data_ptr()).contains(&key) } {
-            self.inner_mut().changed_keys.lock().insert(key);
-        }
-    }
-    pub(crate) fn is_changed(&self) -> bool {
-        !self.inner.changed_keys.lock().is_empty()
-    }
-
     pub(crate) fn size_hint(&self, cursor: usize) -> usize {
         self.size_hint_with(&self.stream_key, cursor)
     }
@@ -164,5 +133,72 @@ where
 
     fn inner_mut(&self) -> &mut Inner<K, V, S> {
         self.inner.get_mut()
+    }
+}
+
+pub struct Scope<K, V, S>
+where
+    K: Clone + Default + Eq + Hash,
+    S: Storage<V>,
+{
+    manager: RawRef<StorageManager<K, V, S>>,
+    changed_keys: HashSet<K>,
+}
+
+impl<K, V, S> Deref for Scope<K, V, S>
+where
+    K: Clone + Default + Eq + Hash,
+    S: Storage<V>,
+{
+    type Target = StorageManager<K, V, S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.manager
+    }
+}
+
+impl<K, V, S> Scope<K, V, S>
+where
+    K: Clone + Default + Eq + Hash,
+    S: Storage<V>,
+{
+    pub fn new(manager: &StorageManager<K, V, S>) -> Self {
+        Self {
+            manager: RawRef::from(manager),
+            changed_keys: HashSet::new(),
+        }
+    }
+
+    pub fn insert(&mut self, value: V) {
+        self.insert_with(K::default(), value)
+    }
+
+    pub fn insert_with(&mut self, key: K, value: V) {
+        match self.inner_mut().storages.get_mut(&key) {
+            Some(buffer) => buffer,
+            None => self.inner_mut().storages.entry(key.clone()).or_insert(self.inner.template.clone()),
+        }
+        .insert(value);
+        self.set_changed(key)
+    }
+
+    fn set_changed(&mut self, key: K) {
+        self.changed_keys.insert(key);
+    }
+}
+
+impl<K, V, S> Drop for Scope<K, V, S>
+where
+    K: Clone + Default + Eq + Hash,
+    S: Storage<V>,
+{
+    fn drop(&mut self) {
+        for key in self.changed_keys.iter() {
+            if let Some(wakers) = self.inner.registry.get(key) {
+                for (_, waker) in wakers.iter() {
+                    waker.wake();
+                }
+            }
+        }
     }
 }

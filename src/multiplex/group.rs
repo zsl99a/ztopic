@@ -15,7 +15,7 @@ where
 {
     index: usize,
     max_load: usize,
-    notify: Arc<Notify>,
+    refreshed: Arc<Notify>,
     manager: StorageManager<K, V, S>,
 }
 
@@ -36,17 +36,17 @@ where
     K: Clone + Default + Hash + Eq + Ord,
     S: Storage<V>,
 {
-    pub fn new(index: usize, max_load: usize, notify: Arc<Notify>, manager: StorageManager<K, V, S>) -> Self {
+    pub fn new(index: usize, max_load: usize, refreshed: Arc<Notify>, manager: StorageManager<K, V, S>) -> Self {
         Self {
             index,
             max_load,
-            notify,
+            refreshed,
             manager,
         }
     }
 
-    pub async fn notified(&self) {
-        self.notify.notified().await
+    pub async fn refreshed(&self) {
+        self.refreshed.notified().await
     }
 
     pub fn difference(&self, current: &Vec<K>) -> (Vec<K>, Vec<K>) {

@@ -16,7 +16,7 @@ where
     storage: StorageManager<K, V, S>,
     new_group: Arc<NewGroupHook<K, V, S>>,
     join_sets: Vec<JoinSet<()>>,
-    notify: Arc<Notify>,
+    refreshed: Arc<Notify>,
 }
 
 impl<K, V, S> Flow<K, V, S>
@@ -35,14 +35,14 @@ where
             storage,
             new_group: Arc::new(move |group| Box::pin(new_group(group))),
             join_sets: vec![],
-            notify: Arc::new(Notify::new()),
+            refreshed: Arc::new(Notify::new()),
         }
     }
 
     pub fn to_stream(mut self) -> BoxStream<'static, ()> {
         async_stream::stream! {
             loop {
-                self.storage.notified().await;
+                self.storage.registry_changed().await;
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 self.refresh();
                 yield;
@@ -61,7 +61,7 @@ where
                     join_set.spawn((self.new_group)(FlowGroup::new(
                         self.join_sets.len(),
                         self.max_load,
-                        self.notify.clone(),
+                        self.refreshed.clone(),
                         self.storage.clone(),
                     )));
                     self.join_sets.push(join_set);
@@ -72,6 +72,6 @@ where
                 Ordering::Equal => break,
             }
         }
-        self.notify.notify_waiters();
+        self.refreshed.notify_waiters();
     }
 }

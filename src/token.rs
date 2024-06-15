@@ -141,14 +141,8 @@ where
         self
     }
 
-    pub async fn insert(&self, value: T::Output) {
-        self.insert_with(K::default(), value).await
-    }
-
-    pub async fn insert_with(&self, key: K, value: T::Output) {
-        let _lock = self.inner.streaming.lock();
-        self.storage.insert_with(key, value);
-        self.storage.wake_all();
+    pub fn storage(&self) -> &StorageManager<K, T::Output, T::Storage> {
+        &self.storage
     }
 
     pub fn is_empty(&self) -> bool {
@@ -173,17 +167,17 @@ where
             }
 
             if let Some(_lock) = self.inner.streaming.try_lock() {
+                let mut is_changed = false;
                 loop {
                     match self.inner.get_mut().stream.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(_))) => {}
+                        Poll::Ready(Some(Ok(_))) => is_changed = true,
                         Poll::Ready(Some(Err(error))) => return Poll::Ready(Some(Err(error))),
                         Poll::Ready(None) => return Poll::Ready(None),
                         Poll::Pending => break,
                     }
                 }
 
-                if self.storage.is_changed() {
-                    self.storage.wake_all();
+                if is_changed {
                     continue;
                 } else {
                     self.storage.register(self.stream_id, cx.waker());
