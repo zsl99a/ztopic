@@ -42,10 +42,10 @@ where
     pub fn to_stream(mut self) -> BoxStream<'static, ()> {
         async_stream::stream! {
             loop {
-                self.storage.registry_changed().await;
-                tokio::time::sleep(Duration::from_millis(100)).await;
                 self.refresh();
                 yield;
+                self.storage.registry_changed().await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
         .boxed()

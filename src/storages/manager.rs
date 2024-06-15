@@ -124,7 +124,7 @@ where
     }
 
     pub(crate) fn size_hint_with(&self, key: &K, cursor: usize) -> usize {
-        self.inner.storages.get(&key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
+        self.inner.storages.get(key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
     }
 
     pub(crate) fn registry(&self) -> &HashMap<K, HashMap<usize, AtomicWaker>> {

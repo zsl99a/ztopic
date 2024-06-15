@@ -2,17 +2,14 @@ use std::{
     cmp::Eq,
     hash::Hash,
     pin::Pin,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+    sync::Arc,
     task::{Context, Poll},
 };
 
 use futures::{stream::BoxStream, Stream, StreamExt};
 use parking_lot::Mutex;
 
-use crate::{common::SyncCell, manager::TopicManager, storages::StorageManager, topic::Topic, Storage};
+use crate::{manager::TopicManager, storages::StorageManager, topic::Topic, Storage};
 
 pub struct TopicToken<T, S, K>
 where
@@ -21,7 +18,7 @@ where
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
-    inner: Arc<SyncCell<Inner<T, S, K>>>,
+    inner: Arc<Mutex<Inner<T, S, K>>>,
     storage: StorageManager<K, T::Output, T::Storage>,
     cursor: usize,
     stream_id: usize,
@@ -37,8 +34,7 @@ where
     stream: BoxStream<'static, Result<(), T::Error>>,
     topic_id: String,
     manager: TopicManager<S>,
-    next_stream_id: AtomicUsize,
-    streaming: Mutex<()>,
+    next_stream_id: usize,
 }
 
 impl<T, S, K> Clone for TopicToken<T, S, K>
@@ -70,8 +66,8 @@ where
     fn drop(&mut self) {
         let stream_id = self.stream_id;
         let storage = self.storage.clone();
-        let topic_id = self.inner.topic_id.clone();
-        let manager = self.inner.manager.clone();
+        let topic_id = self.inner().topic_id.clone();
+        let manager = self.inner().manager.clone();
         let inner = self.inner.clone();
         tokio::spawn(async move {
             let mut lock = manager.topics().lock();
@@ -111,12 +107,11 @@ where
                 let stream = topic.mount(manager.clone(), storage.clone());
 
                 let token = Self {
-                    inner: Arc::new(SyncCell::new(Inner {
+                    inner: Arc::new(Mutex::new(Inner {
                         stream,
                         topic_id: topic_id.clone(),
                         manager: manager.clone(),
-                        next_stream_id: AtomicUsize::new(1),
-                        streaming: Mutex::new(()),
+                        next_stream_id: 0,
                     })),
                     storage,
                     cursor: 0,
@@ -129,12 +124,18 @@ where
     }
 
     fn new_stream_id(&self) -> usize {
-        self.inner.next_stream_id.fetch_add(1, Ordering::Release)
+        let mut lock = self.inner.lock();
+        lock.next_stream_id += 1;
+        lock.next_stream_id
+    }
+
+    fn inner(&self) -> &Inner<T, S, K> {
+        unsafe { &*self.inner.data_ptr() }
     }
 
     pub fn with_key(mut self, stream_key: K) -> Self {
         {
-            let _lock = self.inner.streaming.lock();
+            let _lock = self.inner.lock();
             let cursor = self.storage.with_key(stream_key, self.stream_id);
             self.cursor = cursor;
         }
@@ -166,10 +167,10 @@ where
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            if let Some(_lock) = self.inner.streaming.try_lock() {
+            if let Some(mut lock) = self.inner.try_lock() {
                 let mut is_changed = false;
                 loop {
-                    match self.inner.get_mut().stream.poll_next_unpin(cx) {
+                    match lock.stream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(_))) => is_changed = true,
                         Poll::Ready(Some(Err(error))) => return Poll::Ready(Some(Err(error))),
                         Poll::Ready(None) => return Poll::Ready(None),
