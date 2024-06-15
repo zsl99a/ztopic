@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, hash::Hash, marker::Send, sync::Arc};
+use std::{cmp::Ordering, hash::Hash, marker::Send, sync::Arc, time::Duration};
 
 use futures::{future::BoxFuture, stream::BoxStream, Future, StreamExt};
 use tokio::{sync::Notify, task::JoinSet};
@@ -42,9 +42,10 @@ where
     pub fn to_stream(mut self) -> BoxStream<'static, ()> {
         async_stream::stream! {
             loop {
+                self.storage.notified().await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 self.refresh();
                 yield;
-                self.storage.notified().await;
             }
         }
         .boxed()
