@@ -14,7 +14,7 @@ use crate::{manager::TopicManager, storages::StorageManager, topic::Topic, Stora
 pub struct TopicToken<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
@@ -27,7 +27,7 @@ where
 pub(crate) struct Inner<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
@@ -40,7 +40,7 @@ where
 impl<T, S, K> Clone for TopicToken<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
@@ -59,11 +59,13 @@ where
 impl<T, S, K> Drop for TopicToken<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
-    fn drop(&mut self) {
+    fn drop(&mut self)
+    where
+    {
         let stream_id = self.stream_id;
         let storage = self.storage.clone();
         let topic_id = self.inner().topic_id.clone();
@@ -82,7 +84,7 @@ where
 impl<T, S, K> TopicToken<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {
@@ -154,7 +156,7 @@ where
 impl<T, S, K> Stream for TopicToken<T, S, K>
 where
     T: Topic<S, K>,
-    T::Storage: Storage<T::Output>,
+    T::Storage: Storage<T::Output> + Send + Sync + 'static,
     S: Send + Sync + 'static,
     K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
 {

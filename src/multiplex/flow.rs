@@ -23,7 +23,7 @@ impl<K, V, S> Flow<K, V, S>
 where
     K: Clone + Default + Hash + Eq + Ord + Send + 'static,
     V: Send + 'static,
-    S: Storage<V> + 'static,
+    S: Storage<V> + Send + Sync + 'static,
 {
     pub fn new<F, Fut>(max_load: usize, storage: StorageManager<K, V, S>, new_group: F) -> Self
     where

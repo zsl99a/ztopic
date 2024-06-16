@@ -8,9 +8,10 @@ use std::{
 };
 
 use futures::{task::AtomicWaker, Future};
+use parking_lot::Mutex;
 use tokio::sync::Notify;
 
-use crate::{common::SyncCell, references::RawRef, Storage};
+use crate::{references::RawRef, Storage};
 
 pub struct StorageManager<K, V, S>
 where
@@ -18,7 +19,7 @@ where
     S: Storage<V>,
 {
     stream_key: K,
-    inner: Arc<SyncCell<Inner<K, V, S>>>,
+    inner: Arc<Mutex<Inner<K, V, S>>>,
 }
 
 struct Inner<K, V, S>
@@ -29,7 +30,7 @@ where
     template: S,
     storages: HashMap<K, S>,
     registry: HashMap<K, HashMap<usize, AtomicWaker>>,
-    registry_changed: Notify,
+    registry_changed: Arc<Notify>,
     _marker: PhantomData<V>,
 }
 
@@ -54,11 +55,11 @@ where
     pub fn new(storage: S) -> Self {
         Self {
             stream_key: K::default(),
-            inner: Arc::new(SyncCell::new(Inner {
+            inner: Arc::new(Mutex::new(Inner {
                 template: storage.clone(),
                 storages: HashMap::new(),
                 registry: HashMap::new(),
-                registry_changed: Notify::new(),
+                registry_changed: Arc::new(Notify::new()),
                 _marker: PhantomData,
             })),
         }
@@ -69,7 +70,7 @@ where
     }
 
     pub fn registry_changed(&self) -> impl Future<Output = ()> + '_ {
-        self.inner.registry_changed.notified()
+        self.inner().registry_changed.notified()
     }
 }
 
@@ -78,28 +79,43 @@ where
     K: Clone + Default + Eq + Hash,
     S: Storage<V>,
 {
+    fn registry_changed_waiters(&self) {
+        if Arc::strong_count(&self.inner().registry_changed) == 1 {
+            let registry_changed = self.inner().registry_changed.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                registry_changed.notify_waiters();
+            });
+        }
+    }
+
     pub(crate) fn new_stream(&self, stream_id: usize) {
-        match self.inner_mut().registry.get_mut(&self.stream_key) {
+        let mut inner = self.inner.lock();
+        match inner.registry.get_mut(&self.stream_key) {
             Some(wakers) => wakers,
-            None => self.inner_mut().registry.entry(self.stream_key.clone()).or_default(),
+            None => inner.registry.entry(self.stream_key.clone()).or_default(),
         }
         .insert(stream_id, AtomicWaker::new());
-        self.inner.registry_changed.notify_waiters();
+        self.registry_changed_waiters();
     }
 
     pub(crate) fn drop_stream(&self, stream_id: usize) {
-        let inner = self.inner_mut();
+        let mut inner = self.inner.lock();
         if let Some(wakers) = inner.registry.get_mut(&self.stream_key) {
             wakers.remove(&stream_id);
             if wakers.is_empty() {
                 inner.registry.remove(&self.stream_key);
             }
         }
-        self.inner.registry_changed.notify_waiters();
+        self.registry_changed_waiters();
     }
 
     pub(crate) fn get_prev_cursor(&self) -> usize {
-        self.inner.storages.get(&self.stream_key).map(|storage| storage.get_prev_cursor()).unwrap_or(0)
+        self.inner()
+            .storages
+            .get(&self.stream_key)
+            .map(|storage| storage.get_prev_cursor())
+            .unwrap_or(0)
     }
 
     pub(crate) fn with_key(&mut self, stream_key: K, stream_id: usize) -> usize {
@@ -110,11 +126,11 @@ where
     }
 
     pub(crate) fn get_item(&self, cursor: usize) -> Option<(&V, usize)> {
-        self.inner.storages.get(&self.stream_key).and_then(|buffer| buffer.get_item(cursor))
+        self.inner().storages.get(&self.stream_key).and_then(|buffer| buffer.get_item(cursor))
     }
 
     pub(crate) fn register(&self, stream_id: usize, waker: &Waker) {
-        if let Some(w) = self.inner.registry.get(&self.stream_key).and_then(|wakers| wakers.get(&stream_id)) {
+        if let Some(w) = self.inner().registry.get(&self.stream_key).and_then(|wakers| wakers.get(&stream_id)) {
             w.register(waker)
         }
     }
@@ -124,15 +140,19 @@ where
     }
 
     pub(crate) fn size_hint_with(&self, key: &K, cursor: usize) -> usize {
-        self.inner.storages.get(key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
+        self.inner().storages.get(key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
     }
 
     pub(crate) fn registry(&self) -> &HashMap<K, HashMap<usize, AtomicWaker>> {
-        &self.inner.registry
+        &self.inner().registry
+    }
+
+    fn inner(&self) -> &Inner<K, V, S> {
+        unsafe { &*self.inner.data_ptr() }
     }
 
     fn inner_mut(&self) -> &mut Inner<K, V, S> {
-        self.inner.get_mut()
+        unsafe { &mut *self.inner.data_ptr() }
     }
 }
 
@@ -176,7 +196,7 @@ where
     pub fn insert_with(&mut self, key: K, value: V) {
         match self.inner_mut().storages.get_mut(&key) {
             Some(buffer) => buffer,
-            None => self.inner_mut().storages.entry(key.clone()).or_insert(self.inner.template.clone()),
+            None => self.inner_mut().storages.entry(key.clone()).or_insert(self.inner().template.clone()),
         }
         .insert(value);
         self.set_changed(key)
@@ -194,7 +214,7 @@ where
 {
     fn drop(&mut self) {
         for key in self.changed_keys.iter() {
-            if let Some(wakers) = self.inner.registry.get(key) {
+            if let Some(wakers) = self.inner().registry.get(key) {
                 for (_, waker) in wakers.iter() {
                     waker.wake();
                 }

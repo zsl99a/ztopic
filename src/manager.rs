@@ -36,7 +36,7 @@ impl<S> TopicManager<S> {
     pub fn topic<T, K>(&self, topic: T) -> TopicToken<T, S, K>
     where
         T: Topic<S, K>,
-        T::Storage: Storage<T::Output>,
+        T::Storage: Storage<T::Output> + Send + Sync + 'static,
         S: Send + Sync + 'static,
         K: Default + Clone + Eq + Hash + Send + Sync + Unpin + 'static,
     {
