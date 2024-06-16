@@ -7,7 +7,7 @@ use crate::{manager::TopicManager, storages::StorageManager, Storage};
 #[allow(unused_variables)]
 pub trait Topic<S, K>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     Self: Send + 'static,
     Self::Output: Send + 'static,
     Self::Error: Send + 'static,

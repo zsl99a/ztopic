@@ -1,5 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
+    cmp::Ord,
+    collections::{BTreeMap, HashSet},
     hash::Hash,
     marker::PhantomData,
     ops::Deref,
@@ -15,7 +16,7 @@ use crate::{references::RawRef, Storage};
 
 pub struct StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     stream_key: K,
@@ -24,19 +25,19 @@ where
 
 struct Inner<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     template: S,
-    storages: HashMap<K, S>,
-    registry: HashMap<K, HashMap<usize, AtomicWaker>>,
+    storages: BTreeMap<K, S>,
+    registry: BTreeMap<K, BTreeMap<usize, AtomicWaker>>,
     registry_changed: Arc<Notify>,
     _marker: PhantomData<V>,
 }
 
 impl<K, V, S> Clone for StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     fn clone(&self) -> Self {
@@ -49,7 +50,7 @@ where
 
 impl<K, V, S> StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     pub fn new(storage: S) -> Self {
@@ -57,8 +58,8 @@ where
             stream_key: K::default(),
             inner: Arc::new(Mutex::new(Inner {
                 template: storage.clone(),
-                storages: HashMap::new(),
-                registry: HashMap::new(),
+                storages: BTreeMap::new(),
+                registry: BTreeMap::new(),
                 registry_changed: Arc::new(Notify::new()),
                 _marker: PhantomData,
             })),
@@ -76,7 +77,7 @@ where
 
 impl<K, V, S> StorageManager<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     fn registry_changed_waiters(&self) {
@@ -158,7 +159,7 @@ where
 
 pub struct Scope<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     manager: RawRef<StorageManager<K, V, S>>,
@@ -167,7 +168,7 @@ where
 
 impl<K, V, S> Deref for Scope<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     type Target = StorageManager<K, V, S>;
@@ -179,7 +180,7 @@ where
 
 impl<K, V, S> Scope<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     pub fn new(manager: &StorageManager<K, V, S>) -> Self {
@@ -209,7 +210,7 @@ where
 
 impl<K, V, S> Drop for Scope<K, V, S>
 where
-    K: Clone + Default + Eq + Hash,
+    K: Clone + Default + Eq + Hash + Ord,
     S: Storage<V>,
 {
     fn drop(&mut self) {
