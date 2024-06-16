@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, hash::Hash, marker::Send, sync::Arc, time::Duration};
+use std::{cmp::Ordering, hash::Hash, marker::Send, sync::Arc};
 
 use futures::{future::BoxFuture, stream::BoxStream, Future, StreamExt};
 use tokio::{sync::Notify, task::JoinSet};
@@ -45,14 +45,14 @@ where
                 self.refresh();
                 yield;
                 self.storage.registry_changed().await;
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                println!("refresh")
             }
         }
         .boxed()
     }
 
     fn refresh(&mut self) {
-        let keys = self.storage.registry().keys().cloned().collect::<Vec<_>>();
+        let keys = self.storage.registry_keys();
         let group_size = keys.len() / self.max_load + 1;
         loop {
             match self.join_sets.len().cmp(&group_size) {

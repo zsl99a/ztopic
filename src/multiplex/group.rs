@@ -50,12 +50,12 @@ where
     }
 
     pub fn difference(&self, current: &Vec<K>) -> (Vec<K>, Vec<K>) {
-        let group_size = self.manager.registry().len() / self.max_load + 1;
+        let keys = self.manager.registry_keys();
 
-        let group_keys = self
-            .manager
-            .registry()
-            .keys()
+        let group_size = keys.len() / self.max_load + 1;
+
+        let group_keys = keys
+            .iter()
             .filter_map(|key| {
                 let mut hasher = DefaultHasher::new();
                 key.hash(&mut hasher);

@@ -83,7 +83,7 @@ where
         if Arc::strong_count(&self.inner().registry_changed) == 1 {
             let registry_changed = self.inner().registry_changed.clone();
             tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                 registry_changed.notify_waiters();
             });
         }
@@ -143,8 +143,8 @@ where
         self.inner().storages.get(key).map(|buffer| buffer.size_hint(cursor)).unwrap_or(0)
     }
 
-    pub(crate) fn registry(&self) -> &HashMap<K, HashMap<usize, AtomicWaker>> {
-        &self.inner().registry
+    pub(crate) fn registry_keys(&self) -> Vec<K> {
+        self.inner.lock().registry.keys().cloned().collect()
     }
 
     fn inner(&self) -> &Inner<K, V, S> {
