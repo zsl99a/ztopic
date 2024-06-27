@@ -23,4 +23,4 @@ tokio = { version = "1", features = ["full"] }
 async-stream = "0"
 
 rand = "0"
-dashmap = "5"
+dashmap = "6"
