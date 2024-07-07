@@ -1,39 +1,37 @@
 use std::{cmp::Ordering, hash::Hash, marker::Send, sync::Arc};
 
-use futures::{future::BoxFuture, stream::BoxStream, Future, StreamExt};
+use futures::{stream::BoxStream, Future, StreamExt};
 use tokio::{sync::Notify, task::JoinSet};
 
 use crate::{storages::StorageManager, FlowGroup, Storage};
 
-type NewGroupHook<K, V, S> = dyn Fn(FlowGroup<K, V, S>) -> BoxFuture<'static, ()> + Send + Sync;
-
-pub struct Flow<K, V, S>
+pub struct Flow<K, V, S, F, Fut>
 where
     K: Clone + Default + Hash + Eq + Ord,
     S: Storage<V>,
+    F: Fn(FlowGroup<K, V, S>) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     max_load: usize,
     storage: StorageManager<K, V, S>,
-    new_group: Arc<NewGroupHook<K, V, S>>,
+    new_group: F,
     join_sets: Vec<JoinSet<()>>,
     refreshed: Arc<Notify>,
 }
 
-impl<K, V, S> Flow<K, V, S>
+impl<K, V, S, F, Fut> Flow<K, V, S, F, Fut>
 where
     K: Clone + Default + Hash + Eq + Ord + Send + 'static,
     V: Send + 'static,
     S: Storage<V> + Send + Sync + 'static,
+    F: Fn(FlowGroup<K, V, S>) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
-    pub fn new<F, Fut>(max_load: usize, storage: StorageManager<K, V, S>, new_group: F) -> Self
-    where
-        F: Fn(FlowGroup<K, V, S>) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = ()> + Send + Sync + 'static,
-    {
+    pub fn new(max_load: usize, storage: StorageManager<K, V, S>, new_group: F) -> Self {
         Self {
             max_load,
             storage,
-            new_group: Arc::new(move |group| Box::pin(new_group(group))),
+            new_group,
             join_sets: vec![],
             refreshed: Arc::new(Notify::new()),
         }
@@ -45,7 +43,6 @@ where
                 self.refresh();
                 yield;
                 self.storage.registry_changed().await;
-                println!("refresh")
             }
         }
         .boxed()
