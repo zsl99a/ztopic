@@ -51,7 +51,7 @@ where
             cursor: self.storage.get_prev_cursor(),
             stream_id: self.new_stream_id(),
         };
-        this.storage.new_stream(this.stream_id);
+        this.storage.register(this.stream_id);
         this
     }
 }
@@ -71,7 +71,7 @@ where
         let inner = self.inner.clone();
         tokio::spawn(async move {
             let mut lock = manager.topics().lock();
-            storage.drop_stream(stream_id);
+            storage.unregister(stream_id);
             if Arc::strong_count(&inner) == 2 {
                 lock.remove(&topic_id);
             }
@@ -183,7 +183,7 @@ where
                 }
             }
 
-            self.storage.register(self.stream_id, cx.waker());
+            self.storage.refresh_waker(self.stream_id, cx.waker());
 
             return Poll::Pending;
         }

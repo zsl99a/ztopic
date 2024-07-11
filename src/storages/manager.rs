@@ -90,7 +90,7 @@ where
         }
     }
 
-    pub(crate) fn new_stream(&self, stream_id: usize) {
+    pub(crate) fn register(&self, stream_id: usize) {
         let mut inner = self.inner.lock();
         match inner.registry.get_mut(&self.stream_key) {
             Some(wakers) => wakers,
@@ -100,7 +100,7 @@ where
         self.registry_changed_waiters();
     }
 
-    pub(crate) fn drop_stream(&self, stream_id: usize) {
+    pub(crate) fn unregister(&self, stream_id: usize) {
         let mut inner = self.inner.lock();
         if let Some(wakers) = inner.registry.get_mut(&self.stream_key) {
             wakers.remove(&stream_id);
@@ -120,9 +120,9 @@ where
     }
 
     pub(crate) fn with_key(&mut self, stream_key: K, stream_id: usize) -> usize {
-        self.drop_stream(stream_id);
+        self.unregister(stream_id);
         self.stream_key = stream_key;
-        self.new_stream(stream_id);
+        self.register(stream_id);
         self.get_prev_cursor()
     }
 
@@ -130,7 +130,7 @@ where
         self.inner().storages.get(&self.stream_key).and_then(|buffer| buffer.get_item(cursor))
     }
 
-    pub(crate) fn register(&self, stream_id: usize, waker: &Waker) {
+    pub(crate) fn refresh_waker(&self, stream_id: usize, waker: &Waker) {
         if let Some(w) = self.inner().registry.get(&self.stream_key).and_then(|wakers| wakers.get(&stream_id)) {
             w.register(waker)
         }
