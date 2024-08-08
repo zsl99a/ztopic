@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::Result;
-use axum::Server;
 use futures::{
     stream::{select_all, BoxStream},
     StreamExt,
@@ -75,7 +74,9 @@ async fn main() -> Result<()> {
 
     let routes = helium::helium_routes(manager);
 
-    Server::bind(&addr).serve(routes.into_make_service()).await?;
+    let tcp_listener = tokio::net::TcpListener::bind(addr).await?;
+
+    axum::serve::serve(tcp_listener, routes.into_make_service()).await?;
 
     Ok(())
 }
