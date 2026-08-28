@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use futures::{SinkExt, StreamExt};
-use helium::SharedStream;
+use ztopic::SharedStream;
 use tokio::{task::yield_now, time::Duration};
 
 #[tokio::main]

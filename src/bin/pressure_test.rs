@@ -1,7 +1,7 @@
 use std::{convert::Infallible, time::Duration};
 
 use futures::{stream::BoxStream, StreamExt};
-use helium::{Interval, Topic, TopicManager};
+use ztopic::{Interval, Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {

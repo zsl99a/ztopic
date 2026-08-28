@@ -1,5 +1,5 @@
 [package]
-name = "helium"
+name = "ztopic"
 version = "0.1.0"
 edition = "2021"
 

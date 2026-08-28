@@ -1,4 +1,4 @@
-# 🎈 Helium (ztopic)
+# ⚡ ztopic
 
 > 基于 **Rust + Tokio** 的轻量级异步流式主题发布订阅（Pub/Sub）与事件分发组件。
 
@@ -10,7 +10,7 @@
 
 ## 📖 项目简介
 
-`Helium`（ztopic）是一个面向高并发异步场景设计的流式发布/订阅与主题管理库。基于 Rust 的零成本抽象与 `futures::Stream` 机制，提供多生产者-多消费者模式下的多路流分发、批量缓冲（Batch Buffer）与 Axum WebSocket 实时推送能力。
+`ztopic` 是一个面向高并发异步场景设计的流式发布/订阅与主题管理库。基于 Rust 的零成本抽象与 `futures::Stream` 机制，提供多生产者-多消费者模式下的多路流分发、批量缓冲（Batch Buffer）与 Axum WebSocket 实时推送能力。
 
 ---
 
@@ -30,14 +30,14 @@
 
 ```toml
 [dependencies]
-helium = { git = "https://github.com/zsl99a/ztopic.git" }
+ztopic = { git = "https://github.com/zsl99a/ztopic.git" }
 tokio = { version = "1", features = ["full"] }
 ```
 
 ### 基础使用示例
 
 ```rust
-use helium::{Topic, TopicManager};
+use ztopic::{Topic, TopicManager};
 use futures::StreamExt;
 
 #[tokio::main]

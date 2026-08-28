@@ -7,7 +7,7 @@ use futures::{
     stream::{select_all, BoxStream},
     StreamExt,
 };
-use helium::{Interval, Topic, TopicManager};
+use ztopic::{Interval, Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {

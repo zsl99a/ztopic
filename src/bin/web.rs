@@ -9,7 +9,7 @@ use futures::{
     stream::{select_all, BoxStream},
     StreamExt,
 };
-use helium::{Interval, Topic, TopicManager};
+use ztopic::{Interval, Topic, TopicManager};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    let routes = helium::helium_routes(manager);
+    let routes = ztopic::helium_routes(manager);
 
     let tcp_listener = tokio::net::TcpListener::bind(addr).await?;
 

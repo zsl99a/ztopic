@@ -1,5 +1,5 @@
 use futures::{channel::mpsc, stream::BoxStream, SinkExt, StreamExt};
-use helium::{Topic, TopicManager};
+use ztopic::{Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {

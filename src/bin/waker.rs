@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use futures::{stream::BoxStream, StreamExt};
-use helium::{Topic, TopicManager};
+use ztopic::{Topic, TopicManager};
 
 #[tokio::main]
 async fn main() {
